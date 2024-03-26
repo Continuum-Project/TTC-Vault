@@ -2,14 +2,14 @@
 
 pragma solidity 0.8.20;
 
-import './TTC.sol';
+import "./TTC.sol";
 
 //Interfaces
-import './interfaces/IVault.sol';
-import '@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol';
-import './interfaces/IWETH.sol';
+import "./interfaces/IVault.sol";
+import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
+import "./interfaces/IWETH.sol";
 
-contract TTCVault is IVault {
+contract TtcVault is IVault {
     uint8 public constant continuumFee = 1;
     uint24 public constant poolFee = 10000;
 
@@ -25,27 +25,49 @@ contract TTCVault is IVault {
 
     Token[10] constituentTokens;
 
-    constructor (Token[10] memory initialTokens, address treasury, address swapRouterAddress, address wETH_address) {   
-        i_ttcToken = new TTC(address(this));
+    constructor(
+        Token[10] memory initialTokens,
+        address treasury,
+        address swapRouterAddress,
+        address wETH_address
+    ) {
+        i_ttcToken = new TTC();
         i_continuumTreasury = payable(treasury);
         i_swapRouter = ISwapRouter(swapRouterAddress);
         i_wethAddress = wETH_address;
 
-        if (!checkTokenList(initialTokens)){
+        if (!checkTokenList(initialTokens)) {
             revert InvalidTokenList();
         }
-        constituentTokens = initialTokens; 
+
+        // 
+        for (uint8 i; i < initialTokens.length; i++) {
+            constituentTokens[i] = initialTokens[i];
+        }
     }
 
-    function checkTokenList(Token[10] memory tokens) private view returns (bool) {
+    function checkTokenList(
+        Token[10] memory tokens
+    ) private view returns (bool) {
         uint8 totalWeight;
 
-        for (uint8 i; i < 10; i++) {
+        for (uint8 i; i < tokens.length; i++) {
+            // Check weight is > 0
+            if (tokens[i].weight == 0) return false;
             totalWeight += tokens[i].weight;
+
             // Check if token is a fungible token
             IERC20(tokens[i].tokenAddress).totalSupply();
+
+            // Check if any duplicate tokens 
+            for (uint8 j = i + 1; j < tokens.length; j++) {
+                if (tokens[i].tokenAddress == tokens[j].tokenAddress) {
+                    return false;
+                }
+            }
         }
 
+        // Check sum of weights is 100
         return (totalWeight == 100);
     }
 
@@ -58,8 +80,8 @@ contract TTCVault is IVault {
     }
 
     function executeSwap(uint amount, uint index) internal returns (uint) {
-        ISwapRouter.ExactInputSingleParams memory params =
-            ISwapRouter.ExactInputSingleParams({
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+            .ExactInputSingleParams({
                 tokenIn: i_wethAddress,
                 tokenOut: constituentTokens[index].tokenAddress,
                 fee: poolFee,
@@ -73,21 +95,20 @@ contract TTCVault is IVault {
         return i_swapRouter.exactInputSingle(params);
     }
 
-
     function mint() public payable {
-        require (msg.value >= 0.01 ether, "Minimum amount to mint is 0.01 ETH");
+        require(msg.value >= 0.01 ether, "Minimum amount to mint is 0.01 ETH");
 
-        uint fee = (continuumFee  * msg.value) / 1000;
-        if (fee > .001 ether){
+        uint fee = (continuumFee * msg.value) / 1000;
+        if (fee > .001 ether) {
             fee = .001 ether;
         }
-        
+
         // Transfer Continuum Fee
         i_continuumTreasury.transfer(fee);
 
         // Convert ETH to WETH for token swaps
         uint amount = msg.value - fee;
-        
+
         uint aum = 0;
         aum += IWETH(i_wethAddress).balanceOf(address(this));
 
@@ -96,12 +117,17 @@ contract TTCVault is IVault {
 
         uint totalSupplyTtc = i_ttcToken.totalSupply();
 
-        for (uint i = 0; i < constituentTokens.length; i++) {      
-            if (constituentTokens[i].weight != 0 && constituentTokens[i].tokenAddress != i_wethAddress) {
-                uint amountToSwap = (amount * constituentTokens[i].weight) / 100;
-                uint balance = IERC20(constituentTokens[i].tokenAddress).balanceOf(address(this));
+        for (uint i = 0; i < constituentTokens.length; i++) {
+            if (
+                constituentTokens[i].weight != 0 &&
+                constituentTokens[i].tokenAddress != i_wethAddress
+            ) {
+                uint amountToSwap = (amount * constituentTokens[i].weight) /
+                    100;
+                uint balance = IERC20(constituentTokens[i].tokenAddress)
+                    .balanceOf(address(this));
                 uint tokensReceived = executeSwap(amountToSwap, i);
-                aum += ((balance * amountToSwap) / (tokensReceived));   
+                aum += ((balance * amountToSwap) / (tokensReceived));
             }
         }
 
@@ -119,12 +145,17 @@ contract TTCVault is IVault {
     function redeem(uint amount) public {
         uint totalSupplyTtc = i_ttcToken.totalSupply();
         require(totalSupplyTtc > 0, "Vault is empty");
-        require(amount > 0 && amount <= i_ttcToken.balanceOf(msg.sender), "Invalid amount to redeem");
+        require(
+            amount > 0 && amount <= i_ttcToken.balanceOf(msg.sender),
+            "Invalid amount to redeem"
+        );
 
         for (uint i = 0; i < constituentTokens.length; i++) {
             if (constituentTokens[i].weight != 0) {
-                uint balanceOfAsset = IERC20(constituentTokens[i].tokenAddress).balanceOf(address(this));
-                uint amountToTransfer = (balanceOfAsset * amount) / totalSupplyTtc;
+                uint balanceOfAsset = IERC20(constituentTokens[i].tokenAddress)
+                    .balanceOf(address(this));
+                uint amountToTransfer = (balanceOfAsset * amount) /
+                    totalSupplyTtc;
                 uint fee = amountToTransfer / 1000;
                 if (constituentTokens[i].tokenAddress == i_wethAddress) {
                     // Handle WETH specifically
@@ -132,8 +163,20 @@ contract TTCVault is IVault {
                     payable(msg.sender).transfer(amountToTransfer - fee);
                     payable(i_continuumTreasury).transfer(fee);
                 } else {
-                    require(IERC20(constituentTokens[i].tokenAddress).transfer(msg.sender, amountToTransfer - fee), "User Transfer failed");
-                    require(IERC20(constituentTokens[i].tokenAddress).transfer(i_continuumTreasury, fee), "Treasury Transfer failed");
+                    require(
+                        IERC20(constituentTokens[i].tokenAddress).transfer(
+                            msg.sender,
+                            amountToTransfer - fee
+                        ),
+                        "User Transfer failed"
+                    );
+                    require(
+                        IERC20(constituentTokens[i].tokenAddress).transfer(
+                            i_continuumTreasury,
+                            fee
+                        ),
+                        "Treasury Transfer failed"
+                    );
                 }
             }
         }
@@ -149,5 +192,4 @@ contract TTCVault is IVault {
     receive() external payable {
         mint();
     }
-
 }
