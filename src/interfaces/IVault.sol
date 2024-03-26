@@ -3,10 +3,18 @@
 pragma solidity 0.8.20;
 
 interface IVault{
+    //Errors
+    error InvalidTokenList();
 
+    // Events
+    /// @notice event for minting
     event Minted(address indexed sender, uint256 ethAmount, uint256 ttcAmount);
+
+    /// @notice event for redeeming
     event Redeemed(address indexed sender, uint256 ttcAmount);
 
+
+    // Methods
     /// @notice mint tokens for msg.value to msg.sender 
     function mint() external payable;
 

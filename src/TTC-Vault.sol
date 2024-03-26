@@ -19,24 +19,34 @@ contract TTCVault is IVault {
     address public immutable i_wethAddress;
 
     struct Token {
-        uint weight;
+        uint8 weight;
         address tokenAddress;
     }
 
     Token[10] constituentTokens;
 
-    constructor (address treasury, address swapRouterAddress, address wETH_address) {   
+    constructor (Token[10] memory initialTokens, address treasury, address swapRouterAddress, address wETH_address) {   
         i_ttcToken = new TTC(address(this));
         i_continuumTreasury = payable(treasury);
         i_swapRouter = ISwapRouter(swapRouterAddress);
         i_wethAddress = wETH_address;
 
-        // WETH
-        constituentTokens[0] = Token(50, i_wethAddress);
-        // Chainlink
-        constituentTokens[1] = Token(25, 0x326C977E6efc84E512bB9C30f76E30c160eD06FB);
-        // Uniswap
-        constituentTokens[2] = Token(25, 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984);
+        if (!checkTokenList(initialTokens)){
+            revert InvalidTokenList();
+        }
+        constituentTokens = initialTokens; 
+    }
+
+    function checkTokenList(Token[10] memory tokens) private view returns (bool) {
+        uint8 totalWeight;
+
+        for (uint8 i; i < 10; i++) {
+            totalWeight += tokens[i].weight;
+            // Check if token is a fungible token
+            IERC20(tokens[i].tokenAddress).totalSupply();
+        }
+
+        return (totalWeight == 100);
     }
 
     function getCurrentTokens() public view returns (Token[10] memory) {
