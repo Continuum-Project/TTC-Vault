@@ -13,8 +13,8 @@ import "./interfaces/IWETH.sol";
 contract TtcVault is IVault {
     bool private locked;
 
-    uint8 public constant continuumFee = 1;
-    uint24 public constant poolFee = 10000;
+    uint8 public constant CONTINUUM_FEE = 1;
+    uint24 public constant UNISWAP_POOL_FEE = 10000;
 
     TTC public immutable i_ttcToken;
     address payable public immutable i_continuumTreasury;
@@ -94,7 +94,7 @@ contract TtcVault is IVault {
             .ExactInputSingleParams({
                 tokenIn: i_wethAddress,
                 tokenOut: constituentTokens[index].tokenAddress,
-                fee: poolFee,
+                fee: UNISWAP_POOL_FEE,
                 recipient: address(this),
                 deadline: block.timestamp,
                 amountIn: amount,
@@ -106,47 +106,59 @@ contract TtcVault is IVault {
     }
 
     function mint() public payable {
-        if(msg.value < 0.01 ether) {
+        if (msg.value < 0.01 ether) {
             revert MinimumAmountToMint();
         }
         address wethAddress = i_wethAddress;
-
-        // uint fee = (continuumFee * msg.value) / 1000;
-        // if (fee > .001 ether) {
-        //     fee = .001 ether;
-        // }
-
-        // // Transfer Continuum Fee
-        // i_continuumTreasury.transfer(fee);
 
         // Convert ETH to WETH for token swaps
         // uint amount = msg.value - fee;
         uint amount = msg.value;
 
+        // Initialize AUM to 0. AUM should be calculated in terms of wETH
         uint aum = 0;
+        // Add current balance of wETH to AUM
         aum += IWETH(wethAddress).balanceOf(address(this));
 
+        // Wrap ETH sent in msg.value
         IWETH(wethAddress).deposit{value: amount}();
-        IWETH(wethAddress).approve(address(i_swapRouter), amount);
-
-        uint totalSupplyTtc = i_ttcToken.totalSupply();
 
         for (uint i = 0; i < constituentTokens.length; i++) {
             Token memory token = constituentTokens[i];
+            // No need to swap wETH
             if (token.tokenAddress != wethAddress) {
-                uint amountToSwap = (amount * token.weight) /
-                    100;
-                uint balance = IERC20(token.tokenAddress)
-                    .balanceOf(address(this));
+                // Calculate amount of wETH to swap based on token weight in basket
+                uint amountToSwap = (amount * token.weight) / 100;
+                // Approve the swap router to use the calculated amount for the swap
+                IWETH(wethAddress).approve(address(i_swapRouter), amountToSwap);
+                // Get current balance of token (represented with the precision of the token's decimals)
+                uint balance = IERC20(token.tokenAddress).balanceOf(address(this));
+                // Execute swap and return the tokens received (represented with the precision of the token's decimals)
                 uint tokensReceived = executeSwap(amountToSwap, i);
-                aum += ((balance * amountToSwap) / (tokensReceived));
+                // Adjust the incoming token precision to match that of wETH if not already
+                uint8 tokenDecimals = ERC20(token.tokenAddress).decimals();
+                if (tokenDecimals < 18) {
+                    tokensReceived = tokensReceived * (10 ** (18 - tokenDecimals));
+                }
+                // Add tokens value in wETH to AUM.
+                // (amountToSwap / tokensReceived) is the current market price (on Uniswap) of the asset relative to wETH.
+                aum += (balance * amountToSwap) / tokensReceived;
             }
         }
 
+        console.log("AUM:", aum);
+
+        
+        // TTC minting logic
         uint amountToMint;
+        uint totalSupplyTtc = i_ttcToken.totalSupply();
         if (totalSupplyTtc > 0) {
-            amountToMint = (amount * totalSupplyTtc) / aum;
+            // If total supply of TTC > 0, mint a variable number of tokens. 
+            // Price of TTC (in ETH) prior to this deposit is the AUM (in ETH) prior to deposit divided by the total supply of TTC
+            // Amount they deposited in ETH divided by price of TTC (in ETH) is the amount to mint to the minter
+            amountToMint = (amount * totalSupplyTtc) / (aum);
         } else {
+            // If total supply of TTC is 0, mint 1 token. First mint sets initial price of TTC.
             amountToMint = 1 * (10 ** i_ttcToken.decimals());
         }
         i_ttcToken.mint(msg.sender, amountToMint);
@@ -163,33 +175,33 @@ contract TtcVault is IVault {
         );
 
         for (uint i = 0; i < constituentTokens.length; i++) {
-            if (constituentTokens[i].weight != 0) {
-                uint balanceOfAsset = IERC20(constituentTokens[i].tokenAddress)
-                    .balanceOf(address(this));
-                uint amountToTransfer = (balanceOfAsset * amount) /
-                    totalSupplyTtc;
-                uint fee = amountToTransfer / 1000;
-                if (constituentTokens[i].tokenAddress == i_wethAddress) {
-                    // Handle WETH specifically
-                    IWETH(i_wethAddress).withdraw(amountToTransfer);
-                    payable(msg.sender).transfer(amountToTransfer - fee);
-                    payable(i_continuumTreasury).transfer(fee);
-                } else {
-                    require(
-                        IERC20(constituentTokens[i].tokenAddress).transfer(
-                            msg.sender,
-                            amountToTransfer - fee
-                        ),
-                        "User Transfer failed"
-                    );
-                    require(
-                        IERC20(constituentTokens[i].tokenAddress).transfer(
-                            i_continuumTreasury,
-                            fee
-                        ),
-                        "Treasury Transfer failed"
-                    );
-                }
+            Token memory token = constituentTokens[i];
+            uint balanceOfAsset = IERC20(token.tokenAddress)
+                .balanceOf(address(this));
+            uint amountToTransfer = (balanceOfAsset * amount) / totalSupplyTtc;
+            uint fee = amountToTransfer / 1000;
+            if (token.tokenAddress == i_wethAddress) {
+                // Handle WETH specifically
+                IWETH(i_wethAddress).withdraw(amountToTransfer);
+                payable(msg.sender).transfer(amountToTransfer - fee);
+                payable(i_continuumTreasury).transfer(fee);
+            } else {
+                console.log("right before user transfer");
+                require(
+                    IERC20(token.tokenAddress).transfer(
+                        msg.sender,
+                        amountToTransfer - fee
+                    ),
+                    "User Transfer failed"
+                );
+                console.log("right after user transfer");
+                require(
+                    IERC20(token.tokenAddress).transfer(
+                        i_continuumTreasury,
+                        fee
+                    ),
+                    "Treasury Transfer failed"
+                );
             }
         }
 

@@ -16,6 +16,11 @@ contract VaultTest is Test {
     TtcVault public vault;
     TtcVault.Token[10] public tokens;
 
+    struct TokenBalance {
+        string symbol;
+        uint256 balance;
+    }
+
     function setUp() public {
         vm.selectFork(mainnetFork);
         address treasury = makeAddr("treasury");
@@ -33,21 +38,65 @@ contract VaultTest is Test {
         assertEq(vm.activeFork(), mainnetFork);
     }
 
-   function testMintTtc() public {
-        uint96 weiAmount = 10 ether;
+    function testMintTtc() public {
+        uint96 weiAmount = 1 ether;
         address user = makeAddr("user");
         vm.deal(user, weiAmount);
 
-        assertEq(IERC20(vault.getTtcTokenAddress()).balanceOf(user), 0, "User should have 0 TTC tokens initially");
+        console.log("TTC Balance -",IERC20(vault.getTtcTokenAddress()).balanceOf(user));
+
+        assertEq(
+            IERC20(vault.getTtcTokenAddress()).balanceOf(user),
+            0,
+            "User should have 0 TTC tokens initially"
+        );
 
         vm.startPrank(user);
         vault.mint{value: weiAmount}();
-        vm.stopPrank();
 
-        assertEq(IERC20(vault.getTtcTokenAddress()).balanceOf(user), 1 * (10 ** 18), "User should have received 1 TTC token");
-        
+        console.log("TTC Balance -",IERC20(vault.getTtcTokenAddress()).balanceOf(user));
+
+        assertEq(
+            IERC20(vault.getTtcTokenAddress()).balanceOf(user),
+            1 * (10 ** 18),
+            "User should have received 1 TTC token"
+        );
+
+        vm.deal(user, 5 ether);
+        vault.mint{value: 5 ether}();
+        console.log("TTC Balance -",IERC20(vault.getTtcTokenAddress()).balanceOf(user));
+
+        vm.deal(user, 4 ether);
+        vault.mint{value: 4 ether}();
+        console.log("TTC Balance -",IERC20(vault.getTtcTokenAddress()).balanceOf(user));
+
+        printVaultBalances();
+
+
+        vm.stopPrank();
     }
 
+    function getVaultBalances() public view returns (TokenBalance[10] memory) {
+        TokenBalance[10] memory balances;
+        for (uint8 i; i < 10; i++) {
+            string memory symbol = ERC20(tokens[i].tokenAddress).symbol();
+            uint256 balance = IERC20(tokens[i].tokenAddress).balanceOf(
+                address(vault)
+            );
+            balances[i] = TokenBalance(symbol, balance);
+        }
+        return balances;
+    }
+
+    function printVaultBalances() public view {
+        for (uint8 i; i < 10; i++) {
+            string memory symbol = ERC20(tokens[i].tokenAddress).symbol();
+            uint256 balance = IERC20(tokens[i].tokenAddress).balanceOf(
+                address(vault)
+            );
+            console.log(symbol, "-", balance);
+        }
+    }
 
     function setUpTokens() internal {
         // wETH Token
@@ -99,11 +148,11 @@ contract VaultTest is Test {
                 address(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984)
             )
         );
-        // NEAR Token
+        // MATIC Token
         tokens[7] = (
             TtcVault.Token(
                 5,
-                address(0x85F17Cf997934a597031b2E18a9aB6ebD4B9f6a4)
+                address(0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0)
             )
         );
         // ARB Token
@@ -113,11 +162,11 @@ contract VaultTest is Test {
                 address(0xB50721BCf8d664c30412Cfbc6cf7a15145234ad1)
             )
         );
-        // IMX Token
+        // MANTLE Token
         tokens[9] = (
             TtcVault.Token(
                 5,
-                address(0xF57e7e7C23978C3cAEC3C3548E3D615c346e79fF)
+                address(0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0)
             )
         );
     }
