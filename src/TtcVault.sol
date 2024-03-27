@@ -4,6 +4,7 @@ pragma solidity 0.8.20;
 
 import "./TTC.sol";
 
+import {Test, console} from "forge-std/Test.sol";
 //Interfaces
 import "./interfaces/IVault.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
@@ -29,18 +30,17 @@ contract TtcVault is IVault {
         Token[10] memory initialTokens,
         address treasury,
         address swapRouterAddress,
-        address wETH_address
+        address wethAddress
     ) {
         i_ttcToken = new TTC();
         i_continuumTreasury = payable(treasury);
         i_swapRouter = ISwapRouter(swapRouterAddress);
-        i_wethAddress = wETH_address;
+        i_wethAddress = wethAddress;
 
         if (!checkTokenList(initialTokens)) {
             revert InvalidTokenList();
         }
 
-        // 
         for (uint8 i; i < initialTokens.length; i++) {
             constituentTokens[i] = initialTokens[i];
         }
@@ -52,6 +52,7 @@ contract TtcVault is IVault {
         uint8 totalWeight;
 
         for (uint8 i; i < tokens.length; i++) {
+            console.log(tokens[i].tokenAddress);
             // Check weight is > 0
             if (tokens[i].weight == 0) return false;
             totalWeight += tokens[i].weight;
@@ -59,7 +60,7 @@ contract TtcVault is IVault {
             // Check if token is a fungible token
             IERC20(tokens[i].tokenAddress).totalSupply();
 
-            // Check if any duplicate tokens 
+            // Check for any duplicate tokens 
             for (uint8 j = i + 1; j < tokens.length; j++) {
                 if (tokens[i].tokenAddress == tokens[j].tokenAddress) {
                     return false;
