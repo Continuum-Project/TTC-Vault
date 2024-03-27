@@ -14,7 +14,10 @@ contract TtcVault is IVault {
     bool private locked;
 
     uint8 public constant CONTINUUM_FEE = 1;
-    uint24 public constant UNISWAP_POOL_FEE = 10000;
+    uint24 public constant UNISWAP_PRIMARY_POOL_FEE = 10000;
+    uint24 public constant UNISWAP_SECONDARY_POOL_FEE = 3000;
+    uint24 public constant UNISWAP_TERTIARY_POOL_FEE = 500;
+
 
     TTC public immutable i_ttcToken;
     address payable public immutable i_continuumTreasury;
@@ -94,7 +97,7 @@ contract TtcVault is IVault {
             .ExactInputSingleParams({
                 tokenIn: i_wethAddress,
                 tokenOut: constituentTokens[index].tokenAddress,
-                fee: UNISWAP_POOL_FEE,
+                fee: UNISWAP_PRIMARY_POOL_FEE,
                 recipient: address(this),
                 deadline: block.timestamp,
                 amountIn: amount,
@@ -106,14 +109,14 @@ contract TtcVault is IVault {
             console.log("Swapped", ERC20(constituentTokens[index].tokenAddress).symbol(), "at", params.fee);
             return amountOut;
         } catch {
-            params.fee = 3000;
+            params.fee = UNISWAP_SECONDARY_POOL_FEE;
             try i_swapRouter.exactInputSingle(params) returns (
                 uint256 amountOut
             ) {
                 console.log("Swapped", ERC20(constituentTokens[index].tokenAddress).symbol(), "at", params.fee);
                 return amountOut;
             } catch {
-                params.fee = 500;
+                params.fee = UNISWAP_TERTIARY_POOL_FEE;
                 console.log("Swapped", ERC20(constituentTokens[index].tokenAddress).symbol(), "at", params.fee);
                 return i_swapRouter.exactInputSingle(params);
             }
