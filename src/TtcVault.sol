@@ -102,7 +102,22 @@ contract TtcVault is IVault {
                 sqrtPriceLimitX96: 0
             });
 
-        return i_swapRouter.exactInputSingle(params);
+        try i_swapRouter.exactInputSingle(params) returns (uint256 amountOut) {
+            console.log("Swapped", ERC20(constituentTokens[index].tokenAddress).symbol(), "at", params.fee);
+            return amountOut;
+        } catch {
+            params.fee = 3000;
+            try i_swapRouter.exactInputSingle(params) returns (
+                uint256 amountOut
+            ) {
+                console.log("Swapped", ERC20(constituentTokens[index].tokenAddress).symbol(), "at", params.fee);
+                return amountOut;
+            } catch {
+                params.fee = 500;
+                console.log("Swapped", ERC20(constituentTokens[index].tokenAddress).symbol(), "at", params.fee);
+                return i_swapRouter.exactInputSingle(params);
+            }
+        }
     }
 
     function mint() public payable {
