@@ -6,6 +6,10 @@ interface IVault{
     //Errors
     error InvalidTokenList();
     error MinimumAmountToMint();
+    error EmptyVault();
+    error InvalidRedemptionAmount();
+    error RedemptionTransferFailed();
+    error TreasuryTransferFailed();
 
     // Events
     /// @notice event for minting

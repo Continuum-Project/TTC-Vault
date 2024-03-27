@@ -66,12 +66,15 @@ contract VaultTest is Test {
         vault.mint{value: 5 ether}();
         console.log("TTC Balance -",IERC20(vault.getTtcTokenAddress()).balanceOf(user));
 
-        vm.deal(user, 4 ether);
-        vault.mint{value: 4 ether}();
-        console.log("TTC Balance -",IERC20(vault.getTtcTokenAddress()).balanceOf(user));
+        // vm.deal(user, 4 ether);
+        // vault.mint{value: 4 ether}();
+        // console.log("TTC Balance -",IERC20(vault.getTtcTokenAddress()).balanceOf(user));
 
         printVaultBalances();
 
+        vault.redeem(IERC20(vault.getTtcTokenAddress()).balanceOf(user));
+        
+        printVaultBalances();
 
         vm.stopPrank();
     }
@@ -89,6 +92,7 @@ contract VaultTest is Test {
     }
 
     function printVaultBalances() public view {
+        console.log("Vault Balances:");
         for (uint8 i; i < 10; i++) {
             string memory symbol = ERC20(tokens[i].tokenAddress).symbol();
             uint256 balance = IERC20(tokens[i].tokenAddress).balanceOf(
@@ -106,67 +110,67 @@ contract VaultTest is Test {
                 address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2)
             )
         );
-        // BNB Token
-        tokens[1] = (
-            TtcVault.Token(
-                10,
-                address(0xB8c77482e45F1F44dE1745F52C74426C631bDD52)
-            )
-        );
         // SHIB Token
-        tokens[2] = (
+        tokens[1] = (
             TtcVault.Token(
                 5,
                 address(0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE)
             )
         );
         // TONCOIN Token
-        tokens[3] = (
+        tokens[2] = (
             TtcVault.Token(
                 5,
                 address(0x582d872A1B094FC48F5DE31D3B73F2D9bE47def1)
             )
         );
         // LINK Token
-        tokens[4] = (
+        tokens[3] = (
             TtcVault.Token(
                 5,
                 address(0x514910771AF9Ca656af840dff83E8264EcF986CA)
             )
         );
         // wBTC Token
-        tokens[5] = (
+        tokens[4] = (
             TtcVault.Token(
                 5,
                 address(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599)
             )
         );
         // UNI Token
-        tokens[6] = (
+        tokens[5] = (
             TtcVault.Token(
                 5,
                 address(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984)
             )
         );
         // MATIC Token
-        tokens[7] = (
+        tokens[6] = (
             TtcVault.Token(
                 5,
                 address(0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0)
             )
         );
         // ARB Token
-        tokens[8] = (
+        tokens[7] = (
             TtcVault.Token(
                 5,
                 address(0xB50721BCf8d664c30412Cfbc6cf7a15145234ad1)
             )
         );
         // MANTLE Token
-        tokens[9] = (
+        tokens[8] = (
             TtcVault.Token(
                 5,
-                address(0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0)
+                address(0x3c3a81e81dc49A522A592e7622A7E711c06bf354)
+            )
+        );
+        // BNB Token
+        tokens[9] = (
+            TtcVault.Token(
+                10,
+                address(0xB8c77482e45F1F44dE1745F52C74426C631bDD52)
             )
         );
     }
