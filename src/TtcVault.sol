@@ -46,7 +46,7 @@ contract TtcVault is IVault {
         i_swapRouter = ISwapRouter(swapRouterAddress);
         i_wethAddress = wethAddress;
 
-        // Comment out for saving API calls. Already tested it. It works.
+        // Comment out for saving API calls while testing on forked mainnet. Already tested it. It works.
         // if (!checkTokenList(initialTokens)) {
         //     revert InvalidTokenList();
         // }
@@ -106,32 +106,37 @@ contract TtcVault is IVault {
     }
 
     function mint() public payable {
-        require(msg.value >= 0.01 ether, "Minimum amount to mint is 0.01 ETH");
-
-        uint fee = (continuumFee * msg.value) / 1000;
-        if (fee > .001 ether) {
-            fee = .001 ether;
+        if(msg.value < 0.01 ether) {
+            revert MinimumAmountToMint();
         }
+        address wethAddress = i_wethAddress;
 
-        // Transfer Continuum Fee
-        i_continuumTreasury.transfer(fee);
+        // uint fee = (continuumFee * msg.value) / 1000;
+        // if (fee > .001 ether) {
+        //     fee = .001 ether;
+        // }
+
+        // // Transfer Continuum Fee
+        // i_continuumTreasury.transfer(fee);
 
         // Convert ETH to WETH for token swaps
-        uint amount = msg.value - fee;
+        // uint amount = msg.value - fee;
+        uint amount = msg.value;
 
         uint aum = 0;
-        aum += IWETH(i_wethAddress).balanceOf(address(this));
+        aum += IWETH(wethAddress).balanceOf(address(this));
 
-        IWETH(i_wethAddress).deposit{value: amount}();
-        IWETH(i_wethAddress).approve(address(i_swapRouter), amount);
+        IWETH(wethAddress).deposit{value: amount}();
+        IWETH(wethAddress).approve(address(i_swapRouter), amount);
 
         uint totalSupplyTtc = i_ttcToken.totalSupply();
 
         for (uint i = 0; i < constituentTokens.length; i++) {
-            if (constituentTokens[i].tokenAddress != i_wethAddress) {
-                uint amountToSwap = (amount * constituentTokens[i].weight) /
+            Token memory token = constituentTokens[i];
+            if (token.tokenAddress != wethAddress) {
+                uint amountToSwap = (amount * token.weight) /
                     100;
-                uint balance = IERC20(constituentTokens[i].tokenAddress)
+                uint balance = IERC20(token.tokenAddress)
                     .balanceOf(address(this));
                 uint tokensReceived = executeSwap(amountToSwap, i);
                 aum += ((balance * amountToSwap) / (tokensReceived));

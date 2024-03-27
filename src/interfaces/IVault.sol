@@ -5,6 +5,7 @@ pragma solidity 0.8.20;
 interface IVault{
     //Errors
     error InvalidTokenList();
+    error MinimumAmountToMint();
 
     // Events
     /// @notice event for minting

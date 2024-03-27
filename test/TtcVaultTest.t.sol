@@ -34,7 +34,7 @@ contract VaultTest is Test {
     }
 
    function testMintTtc() public {
-        uint96 weiAmount = 0.01 ether;
+        uint96 weiAmount = 10 ether;
         address user = makeAddr("user");
         vm.deal(user, weiAmount);
 
