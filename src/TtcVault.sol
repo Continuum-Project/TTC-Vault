@@ -11,6 +11,8 @@ import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "./interfaces/IWETH.sol";
 
 contract TtcVault is IVault {
+    bool private locked;
+
     uint8 public constant continuumFee = 1;
     uint24 public constant poolFee = 10000;
 
@@ -25,6 +27,13 @@ contract TtcVault is IVault {
     }
 
     Token[10] constituentTokens;
+
+    modifier noReentrancy() {
+        require(!locked, "No re-entrancy");
+        locked = true;
+        _;
+        locked = false;
+    }
 
     constructor(
         Token[10] memory initialTokens,
@@ -60,7 +69,7 @@ contract TtcVault is IVault {
             // Check if token is a fungible token
             IERC20(tokens[i].tokenAddress).totalSupply();
 
-            // Check for any duplicate tokens 
+            // Check for any duplicate tokens
             for (uint8 j = i + 1; j < tokens.length; j++) {
                 if (tokens[i].tokenAddress == tokens[j].tokenAddress) {
                     return false;
@@ -119,9 +128,7 @@ contract TtcVault is IVault {
         uint totalSupplyTtc = i_ttcToken.totalSupply();
 
         for (uint i = 0; i < constituentTokens.length; i++) {
-            if (
-                constituentTokens[i].tokenAddress != i_wethAddress
-            ) {
+            if (constituentTokens[i].tokenAddress != i_wethAddress) {
                 uint amountToSwap = (amount * constituentTokens[i].weight) /
                     100;
                 uint balance = IERC20(constituentTokens[i].tokenAddress)
@@ -142,7 +149,7 @@ contract TtcVault is IVault {
         emit Minted(msg.sender, amount, amountToMint);
     }
 
-    function redeem(uint amount) public {
+    function redeem(uint amount) public noReentrancy {
         uint totalSupplyTtc = i_ttcToken.totalSupply();
         require(totalSupplyTtc > 0, "Vault is empty");
         require(
@@ -185,11 +192,7 @@ contract TtcVault is IVault {
         emit Redeemed(msg.sender, amount);
     }
 
-    fallback() external payable {
-        mint();
-    }
+    fallback() external payable {}
 
-    receive() external payable {
-        mint();
-    }
+    receive() external payable {}
 }
