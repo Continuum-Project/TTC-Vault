@@ -33,6 +33,21 @@ contract VaultTest is Test {
         assertEq(vm.activeFork(), mainnetFork);
     }
 
+   function testMintTtc() public {
+        uint96 weiAmount = 0.01 ether;
+        address user = makeAddr("user");
+        vm.deal(user, weiAmount);
+
+        assertEq(IERC20(vault.getTtcTokenAddress()).balanceOf(user), 0, "User should have 0 TTC tokens initially");
+
+        vm.startPrank(user);
+        vault.mint{value: weiAmount}();
+        vm.stopPrank();
+
+        assertEq(IERC20(vault.getTtcTokenAddress()).balanceOf(user), 1 * (10 ** 18), "User should have received 1 TTC token");
+        
+    }
+
 
     function setUpTokens() internal {
         // wETH Token

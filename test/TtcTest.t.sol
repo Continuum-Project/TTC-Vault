@@ -35,9 +35,9 @@ contract TtcTest is Test{
         assertEq(ttcToken.owner(), ttcOwner);
     }
 
-    function testMint() public {
+    function testMint(uint96 amountOfTokens) public {
         address user = makeAddr("user");
-        uint amountToMint = 1 * (10 ** ttcToken.decimals());
+        uint amountToMint = amountOfTokens * (10 ** ttcToken.decimals());
         vm.startPrank(ttcOwner);
         ttcToken.mint(user, amountToMint);
         vm.stopPrank();
@@ -45,20 +45,20 @@ contract TtcTest is Test{
         assertEq(ttcToken.totalSupply(), amountToMint);
     }
 
-    function testInvalidMint() public {
+    function testInvalidMint(uint96 amountOfTokens) public {
         address user = makeAddr("user");
         address recipient = makeAddr("recipient");
-        uint amountToMint = 1 * (10 ** ttcToken.decimals());
+        uint amountToMint = amountOfTokens * (10 ** ttcToken.decimals());
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user));
         vm.startPrank(user);
         ttcToken.mint(recipient, amountToMint);
         vm.stopPrank();
     }
 
-    function testBurn() public {
-        testMint();
+    function testBurn(uint96 amountOfTokens) public {
+        testMint(amountOfTokens);
         address user = makeAddr("user");
-        uint amountToBurn = 1 * (10 ** ttcToken.decimals());
+        uint amountToBurn = amountOfTokens * (10 ** ttcToken.decimals());
         vm.startPrank(ttcOwner);
         ttcToken.burn(user, amountToBurn);
         vm.stopPrank();
@@ -66,13 +66,14 @@ contract TtcTest is Test{
         assertEq(ttcToken.totalSupply(), 0);
     }
 
-    function testInvalidBurn() public {
-        testMint();
+    function testInvalidBurn(uint96 amountOfTokens) public {
+        testMint(amountOfTokens);
         address user = makeAddr("user");
-        uint amountToBurn = 1 * (10 ** ttcToken.decimals());
+        uint amountToBurn = amountOfTokens * (10 ** ttcToken.decimals());
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user));
         vm.startPrank(user);
         ttcToken.mint(user, amountToBurn);
         vm.stopPrank();
     }
+
 }

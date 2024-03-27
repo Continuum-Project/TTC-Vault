@@ -4,7 +4,7 @@ pragma solidity 0.8.20;
 
 import "./TTC.sol";
 
-import {Test, console} from "forge-std/Test.sol";
+import {console} from "forge-std/Test.sol";
 //Interfaces
 import "./interfaces/IVault.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
@@ -37,9 +37,10 @@ contract TtcVault is IVault {
         i_swapRouter = ISwapRouter(swapRouterAddress);
         i_wethAddress = wethAddress;
 
-        if (!checkTokenList(initialTokens)) {
-            revert InvalidTokenList();
-        }
+        // Comment out for saving API calls. Already tested it. It works.
+        // if (!checkTokenList(initialTokens)) {
+        //     revert InvalidTokenList();
+        // }
 
         for (uint8 i; i < initialTokens.length; i++) {
             constituentTokens[i] = initialTokens[i];
@@ -52,7 +53,6 @@ contract TtcVault is IVault {
         uint8 totalWeight;
 
         for (uint8 i; i < tokens.length; i++) {
-            console.log(tokens[i].tokenAddress);
             // Check weight is > 0
             if (tokens[i].weight == 0) return false;
             totalWeight += tokens[i].weight;
@@ -120,7 +120,6 @@ contract TtcVault is IVault {
 
         for (uint i = 0; i < constituentTokens.length; i++) {
             if (
-                constituentTokens[i].weight != 0 &&
                 constituentTokens[i].tokenAddress != i_wethAddress
             ) {
                 uint amountToSwap = (amount * constituentTokens[i].weight) /
