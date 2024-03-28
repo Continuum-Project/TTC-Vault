@@ -34,7 +34,9 @@ contract TtcVault is IVault {
     Token[10] constituentTokens;
 
     modifier noReentrancy() {
-        require(!locked, "No re-entrancy");
+        if (locked) {
+            revert NoReentrancy();
+        }
         locked = true;
         _;
         locked = false;

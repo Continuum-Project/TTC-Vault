@@ -10,6 +10,7 @@ interface IVault{
     error InvalidRedemptionAmount();
     error RedemptionTransferFailed();
     error TreasuryTransferFailed();
+    error NoReentrancy();
 
     // Events
     /// @notice event for minting
