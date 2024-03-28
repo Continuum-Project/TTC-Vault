@@ -105,6 +105,9 @@ contract TtcVault is IVault {
                 sqrtPriceLimitX96: 0
             });
 
+        // Try swap at primary, secondary, and tertiary fee tiers respectively. 
+        // Ideally, optimal routing will be computed off-chain and provided as parameter to mint. 
+        // This is a placeholder to make minting functional for now. 
         try i_swapRouter.exactInputSingle(params) returns (uint256 amountOut) {
             console.log("Swapped", ERC20(constituentTokens[index].tokenAddress).symbol(), "at", params.fee);
             return amountOut;
