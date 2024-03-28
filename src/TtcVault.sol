@@ -13,7 +13,9 @@ import "./interfaces/IWETH.sol";
 contract TtcVault is IVault {
     bool private locked;
 
-    uint8 public constant CONTINUUM_FEE = 1e3;
+    // Treasury fee is only taken upon redemption
+    // Fee is initally set to .1% of redemption amount.
+    uint16 public constant TREASURY_REDEMPTION_FEE = 1e3;
     uint24 public constant UNISWAP_PRIMARY_POOL_FEE = 1e4;
     uint24 public constant UNISWAP_SECONDARY_POOL_FEE = 3e3;
     uint24 public constant UNISWAP_TERTIARY_POOL_FEE = 5e2;
@@ -211,7 +213,7 @@ contract TtcVault is IVault {
             uint256 amountToTransfer = (balanceOfAsset * amount) /
                 totalSupplyTtc;
             // Calculate fee for Continuum Treasury (set to 0.1%)
-            uint256 fee = amountToTransfer / CONTINUUM_FEE;
+            uint256 fee = (amountToTransfer / TREASURY_REDEMPTION_FEE);
             // Handle WETH redemption specifically
             if (token.tokenAddress == i_wethAddress) {
                 // Convert wETH to ETH
