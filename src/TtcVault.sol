@@ -13,10 +13,10 @@ import "./interfaces/IWETH.sol";
 contract TtcVault is IVault {
     bool private locked;
 
-    uint8 public constant CONTINUUM_FEE = 1;
-    uint24 public constant UNISWAP_PRIMARY_POOL_FEE = 10000;
-    uint24 public constant UNISWAP_SECONDARY_POOL_FEE = 3000;
-    uint24 public constant UNISWAP_TERTIARY_POOL_FEE = 500;
+    uint8 public constant CONTINUUM_FEE = 1e3;
+    uint24 public constant UNISWAP_PRIMARY_POOL_FEE = 1e4;
+    uint24 public constant UNISWAP_SECONDARY_POOL_FEE = 3e3;
+    uint24 public constant UNISWAP_TERTIARY_POOL_FEE = 5e2;
 
 
     TTC public immutable i_ttcToken;
@@ -182,6 +182,7 @@ contract TtcVault is IVault {
             // If total supply of TTC is 0, mint 1 token. First mint sets initial price of TTC.
             amountToMint = 1 * (10 ** i_ttcToken.decimals());
         }
+        // Mint TTC to the minter
         i_ttcToken.mint(msg.sender, amountToMint);
 
         emit Minted(msg.sender, amount, amountToMint);
@@ -189,9 +190,11 @@ contract TtcVault is IVault {
 
     function redeem(uint256 amount) public noReentrancy {
         uint256 totalSupplyTtc = i_ttcToken.totalSupply();
+        // Check if vault is empty
         if (totalSupplyTtc == 0) {
             revert EmptyVault();
         }
+        // Check if redeemer has enough TTC to redeem amount
         if (amount > i_ttcToken.balanceOf(msg.sender)) {
             revert InvalidRedemptionAmount();
         }
@@ -201,23 +204,31 @@ contract TtcVault is IVault {
             uint256 balanceOfAsset = IERC20(token.tokenAddress).balanceOf(
                 address(this)
             );
+            // amount to transfer is balanceOfAsset times the ratio of redemption amount of TTC to total supply
             uint256 amountToTransfer = (balanceOfAsset * amount) /
                 totalSupplyTtc;
-            uint256 fee = amountToTransfer / 1000;
+            // Calculate fee for Continuum Treasury (set to 0.1%)
+            uint256 fee = amountToTransfer / CONTINUUM_FEE;
+            // Handle WETH redemption specifically
             if (token.tokenAddress == i_wethAddress) {
-                // Handle WETH specifically
+                // Convert wETH to ETH
                 IWETH(i_wethAddress).withdraw(amountToTransfer);
+                // Send ETH to redeemer
                 payable(msg.sender).transfer(amountToTransfer - fee);
+                // Send fee to treasury
                 payable(i_continuumTreasury).transfer(fee);
             } else {
+                // Transfer tokens to redeemer
                 IERC20(token.tokenAddress).transfer(
                     msg.sender,
                     (amountToTransfer - fee)
                 );
+                // Transfer fee to treasury
                 IERC20(token.tokenAddress).transfer(i_continuumTreasury, fee);
             }
         }
 
+        // Burn the TTC redeemed
         i_ttcToken.burn(msg.sender, amount);
         emit Redeemed(msg.sender, amount);
     }
