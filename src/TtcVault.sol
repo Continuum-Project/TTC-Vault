@@ -222,12 +222,16 @@ contract TtcVault is IVault {
                 i_continuumTreasury.transfer(fee);
             } else {
                 // Transfer tokens to redeemer
-                IERC20(token.tokenAddress).transfer(
+                if(!IERC20(token.tokenAddress).transfer(
                     msg.sender,
                     (amountToTransfer - fee)
-                );
+                )) {
+                    revert RedemptionTransferFailed();
+                }
                 // Transfer fee to treasury
-                IERC20(token.tokenAddress).transfer(i_continuumTreasury, fee);
+                if(!IERC20(token.tokenAddress).transfer(i_continuumTreasury, fee)) {
+                    revert TreasuryTransferFailed();
+                }
             }
         }
 
