@@ -110,21 +110,17 @@ contract TtcVault is IVault {
             });
 
         // Try swap at primary, secondary, and tertiary fee tiers respectively. 
-        // Ideally, optimal routing will be computed off-chain and provided as parameter to mint. 
+        // We prioritize highest to lowest fee tiers since we assume higher fees translates to deeper liquidity and better prices.
+        // Ideally, optimal routing would be computed off-chain and provided as a parameter to mint. 
         // This is a placeholder to make minting functional for now. 
         try i_swapRouter.exactInputSingle(params) returns (uint256 amountOut) {
-            console.log("Swapped", ERC20(constituentTokens[index].tokenAddress).symbol(), "at", params.fee);
             return amountOut;
         } catch {
             params.fee = UNISWAP_SECONDARY_POOL_FEE;
-            try i_swapRouter.exactInputSingle(params) returns (
-                uint256 amountOut
-            ) {
-                console.log("Swapped", ERC20(constituentTokens[index].tokenAddress).symbol(), "at", params.fee);
+            try i_swapRouter.exactInputSingle(params) returns (uint256 amountOut) {
                 return amountOut;
             } catch {
                 params.fee = UNISWAP_TERTIARY_POOL_FEE;
-                console.log("Swapped", ERC20(constituentTokens[index].tokenAddress).symbol(), "at", params.fee);
                 return i_swapRouter.exactInputSingle(params);
             }
         }
@@ -140,7 +136,7 @@ contract TtcVault is IVault {
         // uint amount = msg.value - fee;
         uint amount = msg.value;
 
-        // Initialize AUM to 0. AUM should be calculated in terms of wETH
+        // Initialize AUM's value in ETH to 0
         uint aum = 0;
         // Add current balance of wETH to AUM
         aum += IWETH(wethAddress).balanceOf(address(this));
@@ -152,7 +148,7 @@ contract TtcVault is IVault {
             Token memory token = constituentTokens[i];
             // No need to swap wETH
             if (token.tokenAddress != wethAddress) {
-                // Calculate amount of wETH to swap based on token weight in basket
+                // Calculate amount of ETH to swap based on token weight in basket
                 uint amountToSwap = (amount * token.weight) / 100;
                 // Approve the swap router to use the calculated amount for the swap
                 IWETH(wethAddress).approve(address(i_swapRouter), amountToSwap);
@@ -162,15 +158,15 @@ contract TtcVault is IVault {
                 );
                 // Execute swap and return the tokens received (represented with the precision of the token's decimals)
                 uint tokensReceived = executeSwap(amountToSwap, i);
-                // Adjust the incoming token precision to match that of wETH if not already
+                // Adjust the incoming token precision to match that of ETH if not already
                 uint8 tokenDecimals = ERC20(token.tokenAddress).decimals();
                 if (tokenDecimals < 18) {
                     tokensReceived =
                         tokensReceived *
                         (10 ** (18 - tokenDecimals));
                 }
-                // Add tokens value in wETH to AUM.
-                // (amountToSwap / tokensReceived) is the current market price (on Uniswap) of the asset relative to wETH.
+                // Add the token's value in ETH to AUM.
+                // (amountToSwap / tokensReceived) is the current market price (on Uniswap) of the asset relative to ETH.
                 // (amountToSwap / tokensReceived) multiplied by tokenBalance gives us the value in ETH of the token in the vault prior to the swap
                 aum += (tokenBalance * amountToSwap) / tokensReceived;
             }
@@ -223,7 +219,7 @@ contract TtcVault is IVault {
                 // Send ETH to redeemer
                 payable(msg.sender).transfer(amountToTransfer - fee);
                 // Send fee to treasury
-                payable(i_continuumTreasury).transfer(fee);
+                i_continuumTreasury.transfer(fee);
             } else {
                 // Transfer tokens to redeemer
                 IERC20(token.tokenAddress).transfer(
@@ -240,7 +236,6 @@ contract TtcVault is IVault {
         emit Redeemed(msg.sender, amount);
     }
 
-    fallback() external payable {}
+    receive() external payable { }
 
-    receive() external payable {}
 }

@@ -6,7 +6,7 @@ import "forge-std/Test.sol";
 import "../src/TtcVault.sol";
 
 contract VaultTest is Test {
-    uint256 mainnetFork = vm.createFork(vm.envString("MAINNET_RPC_URL"));
+    uint256 mainnetFork;
 
     address constant SWAP_ROUTER_ADDRESS =
         address(0xE592427A0AEce92De3Edee1F18E0157C05861564);
@@ -22,6 +22,11 @@ contract VaultTest is Test {
     }
 
     function setUp() public {
+        try vm.createFork(vm.envString("ALCHEMY_MAINNET_RPC_URL")) returns (uint256 forkId){
+            mainnetFork = forkId;
+        } catch {
+            mainnetFork = vm.createFork(vm.envString("INFURA_MAINNET_RPC_URL"));
+        }
         vm.selectFork(mainnetFork);
         address treasury = makeAddr("treasury");
         setUpTokens();
@@ -38,12 +43,15 @@ contract VaultTest is Test {
         assertEq(vm.activeFork(), mainnetFork);
     }
 
-    function testMintTtc() public {
+    function testMintAndRedeemTtc() public {
         uint96 weiAmount = 1 ether;
         address user = makeAddr("user");
         vm.deal(user, weiAmount);
 
-        console.log("TTC Balance -",IERC20(vault.getTtcTokenAddress()).balanceOf(user));
+        console.log(
+            "TTC Balance -",
+            IERC20(vault.getTtcTokenAddress()).balanceOf(user)
+        );
 
         assertEq(
             IERC20(vault.getTtcTokenAddress()).balanceOf(user),
@@ -54,7 +62,10 @@ contract VaultTest is Test {
         vm.startPrank(user);
         vault.mint{value: weiAmount}();
 
-        console.log("TTC Balance -",IERC20(vault.getTtcTokenAddress()).balanceOf(user));
+        console.log(
+            "TTC Balance -",
+            IERC20(vault.getTtcTokenAddress()).balanceOf(user)
+        );
 
         assertEq(
             IERC20(vault.getTtcTokenAddress()).balanceOf(user),
@@ -62,18 +73,16 @@ contract VaultTest is Test {
             "User should have received 1 TTC token"
         );
 
+        printVaultBalances();
+
         vm.deal(user, 5 ether);
         vault.mint{value: 5 ether}();
         console.log("TTC Balance -",IERC20(vault.getTtcTokenAddress()).balanceOf(user));
 
-        // vm.deal(user, 4 ether);
-        // vault.mint{value: 4 ether}();
-        // console.log("TTC Balance -",IERC20(vault.getTtcTokenAddress()).balanceOf(user));
-
         printVaultBalances();
 
         vault.redeem(IERC20(vault.getTtcTokenAddress()).balanceOf(user));
-        
+
         printVaultBalances();
 
         vm.stopPrank();
@@ -94,11 +103,10 @@ contract VaultTest is Test {
     function printVaultBalances() public view {
         console.log("Vault Balances:");
         for (uint8 i; i < 10; i++) {
-            string memory symbol = ERC20(tokens[i].tokenAddress).symbol();
             uint256 balance = IERC20(tokens[i].tokenAddress).balanceOf(
                 address(vault)
             );
-            console.log(symbol, "-", balance);
+            console.log(tokens[i].tokenAddress, "-", balance);
         }
     }
 
@@ -166,12 +174,19 @@ contract VaultTest is Test {
                 address(0x3c3a81e81dc49A522A592e7622A7E711c06bf354)
             )
         );
-        // BNB Token
+        // MKR Token
         tokens[9] = (
             TtcVault.Token(
                 10,
-                address(0xB8c77482e45F1F44dE1745F52C74426C631bDD52)
+                address(0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2)
             )
         );
+        // BNB Token
+        // tokens[9] = (
+        //     TtcVault.Token(
+        //         10,
+        //         address(0xB8c77482e45F1F44dE1745F52C74426C631bDD52)
+        //     )
+        // );
     }
 }
