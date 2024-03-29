@@ -22,7 +22,9 @@ contract VaultTest is Test {
     }
 
     function setUp() public {
-        try vm.createFork(vm.envString("ALCHEMY_MAINNET_RPC_URL")) returns (uint256 forkId){
+        try vm.createFork(vm.envString("ALCHEMY_MAINNET_RPC_URL")) returns (
+            uint256 forkId
+        ) {
             mainnetFork = forkId;
         } catch {
             mainnetFork = vm.createFork(vm.envString("INFURA_MAINNET_RPC_URL"));
@@ -44,25 +46,18 @@ contract VaultTest is Test {
     }
 
     function testInitialMint() public {
-        uint96 weiAmount = 1 ether;
+        uint96 weiAmount = 5 ether;
         address user = makeAddr("user");
         vm.deal(user, weiAmount);
 
-        console.log(
-            "TTC Balance -",
-            IERC20(vault.getTtcTokenAddress()).balanceOf(user)
-        );
-
-        assertEq(
-            IERC20(vault.getTtcTokenAddress()).balanceOf(user),
-            0,
-            "User should have 0 TTC tokens initially"
-        );
-
         TokenBalance[10] memory balances = getVaultBalances();
         for (uint8 i; i < 10; i++) {
-            assertEq(balances[i].balance, 0);
-        } 
+            assertEq(
+                balances[i].balance,
+                0,
+                "Initial vault balances should be 0"
+            );
+        }
 
         vm.startPrank(user);
         vault.mint{value: weiAmount}();
@@ -76,8 +71,65 @@ contract VaultTest is Test {
 
         balances = getVaultBalances();
         for (uint8 i; i < 10; i++) {
-            assertGt(balances[i].balance, 0);
-        } 
+            assertGt(
+                balances[i].balance,
+                0,
+                "Post-mint vault balances should be greater than 0"
+            );
+        }
+    }
+
+    function testConsecutiveMints() public {
+        uint96 weiAmount = 5 ether;
+        address user = makeAddr("user");
+        vm.deal(user, weiAmount);
+
+        TokenBalance[10] memory balances = getVaultBalances();
+        for (uint8 i; i < 10; i++) {
+            assertEq(
+                balances[i].balance,
+                0,
+                "Initial vault balances should be 0"
+            );
+        }
+
+        vm.startPrank(user);
+        vault.mint{value: weiAmount}();
+
+        assertEq(
+            IERC20(vault.getTtcTokenAddress()).balanceOf(user),
+            1 * (10 ** 18),
+            "User should have received 1 TTC token"
+        );
+
+        balances = getVaultBalances();
+        for (uint8 i; i < 10; i++) {
+            assertGt(
+                balances[i].balance,
+                0,
+                "Post-mint vault balances should be greater than 0"
+            );
+        }
+
+        weiAmount = 3 ether;
+        vm.deal(user, weiAmount);
+        vault.mint{value: weiAmount}();
+        vm.stopPrank();
+
+        assertGt(
+            IERC20(vault.getTtcTokenAddress()).balanceOf(user),
+            1 * (10 ** 18),
+            "User should have received some TTC token from second mint"
+        );
+
+        TokenBalance[10] memory newBalances = getVaultBalances();
+        for (uint8 i; i < 10; i++) {
+            assertGt(
+                newBalances[i].balance,
+                balances[i].balance,
+                "Post-second mint vault balances should be greater than post-first mint balances"
+            );
+        }
     }
 
     function getVaultBalances() public view returns (TokenBalance[10] memory) {
