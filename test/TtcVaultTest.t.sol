@@ -79,6 +79,30 @@ contract VaultTest is Test {
         }
     }
 
+    function testRedeem() public {
+        address user = makeAddr("user");
+        testInitialMint();
+
+        vm.startPrank(user);
+        vault.redeem(1 * (10 ** 18));
+        vm.stopPrank();
+
+        assertEq(
+            IERC20(vault.getTtcTokenAddress()).totalSupply(),
+            0,
+            "Total supply should be 0"
+        );
+
+        TokenBalance[10] memory balances = getVaultBalances();
+        for (uint8 i; i < 10; i++) {
+            assertEq(
+                balances[i].balance,
+                0,
+                "Vault should be empty after redeem"
+            );
+        }
+    }
+
     function testConsecutiveMints() public {
         uint96 weiAmount = 5 ether;
         address user = makeAddr("user");
