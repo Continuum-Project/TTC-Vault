@@ -2,15 +2,25 @@
 
 pragma solidity 0.8.20;
 
+// TTC token contract
 import "./TTC.sol";
-
-import {console} from "forge-std/Test.sol";
-//Interfaces
+// Interfaces
 import "./interfaces/IVault.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "./interfaces/IWETH.sol";
+import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 
 contract TtcVault is IVault {
+    // Errors
+    error InvalidTokenList();
+    error MinimumAmountToMint();
+    error EmptyVault();
+    error InvalidRedemptionAmount();
+    error RedemptionTransferFailed();
+    error TreasuryTransferFailed();
+    error NoReentrancy();
+    error OnlyTreasury();
+
+    // Flag to check for reentrancy
     bool private locked;
 
     // Treasury fee is only taken upon redemption
@@ -22,19 +32,22 @@ contract TtcVault is IVault {
     uint24 public constant UNISWAP_SECONDARY_POOL_FEE = 1e4;
     uint24 public constant UNISWAP_TERTIARY_POOL_FEE = 5e2;
 
-
+    // Immutable globals
     TTC public immutable i_ttcToken;
     address payable public immutable i_continuumTreasury;
     ISwapRouter public immutable i_swapRouter;
     address public immutable i_wethAddress;
 
+    // Structure to represent a token and its allocation in the vault
     struct Token {
         uint8 weight;
         address tokenAddress;
     }
 
+    // Current tokens and their allocations in the vault
     Token[10] constituentTokens;
 
+    // Modifier to prevent reentrancy into a function
     modifier noReentrancy() {
         if (locked) {
             revert NoReentrancy();
@@ -44,6 +57,7 @@ contract TtcVault is IVault {
         locked = false;
     }
 
+    // Modifier to only allow treasury to call a function
     modifier onlyTreasury() {
         if (msg.sender != i_continuumTreasury) {
             revert OnlyTreasury();
@@ -62,16 +76,16 @@ contract TtcVault is IVault {
         i_swapRouter = ISwapRouter(swapRouterAddress);
         i_wethAddress = wethAddress;
 
-        // Comment out for saving API calls while testing on forked mainnet. Already tested it. It works.
-        // if (!checkTokenList(initialTokens)) {
-        //     revert InvalidTokenList();
-        // }
+        if (!checkTokenList(initialTokens)) {
+            revert InvalidTokenList();
+        }
 
         for (uint8 i; i < initialTokens.length; i++) {
             constituentTokens[i] = initialTokens[i];
         }
     }
 
+    // Check that token list has valid ERC20 tokens and weights add up to 100
     function checkTokenList(
         Token[10] memory tokens
     ) private view returns (bool) {
@@ -97,14 +111,17 @@ contract TtcVault is IVault {
         return (totalWeight == 100);
     }
 
+    // Getter for tokens in vault
     function getCurrentTokens() public view returns (Token[10] memory) {
         return constituentTokens;
     }
 
+    // Getter for TTC token address
     function getTtcTokenAddress() public view returns (address) {
         return address(i_ttcToken);
     }
 
+    // Function to execute swap using Uniswap v3
     function executeSwap(address tokenIn, address tokenOut, uint amount) internal returns (uint256, uint24) {
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
@@ -112,7 +129,7 @@ contract TtcVault is IVault {
                 tokenOut: tokenOut, // Token to receive
                 fee: UNISWAP_PRIMARY_POOL_FEE, // Initially set primary fee pool
                 recipient: address(this), // Send tokens to TTC vault
-                deadline: block.timestamp, // Swap must be atomic 
+                deadline: block.timestamp, // Swap must be performed in the current block. This should be passed in as a parameter to mitigate MEV exploits.
                 amountIn: amount, // Amount of tokenIn to swap
                 amountOutMinimum: 0, // Receive whatever we can get for now (should set in production)
                 sqrtPriceLimitX96: 0 // Ignore for now (should set in production to reduce price impact)
@@ -182,7 +199,6 @@ contract TtcVault is IVault {
             }
         }
 
-        console.log("AUM:", aum);
         // TTC minting logic
         uint amountToMint;
         uint totalSupplyTtc = i_ttcToken.totalSupply();
@@ -250,24 +266,39 @@ contract TtcVault is IVault {
         emit Redeemed(msg.sender, ttcAmount);
     }
 
-    function naiveRebalance(Token[10] memory newTokens) public onlyTreasury {
+    function naiveReconstitution(Token[10] memory newTokens) public onlyTreasury {
         // Comment out for saving API calls while testing on forked mainnet. Already tested it. It works.
         // if (!checkTokenList(initialTokens)) {
         //     revert InvalidTokenList();
         // }
 
+        address wethAddress = i_wethAddress;
+
+        // Swap all tokens for wETH
         for (uint8 i; i < constituentTokens.length; i++) {
             Token memory token = constituentTokens[i];
-            uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
-            executeSwap(token.tokenAddress, i_wethAddress, tokenBalance);
+            // No need to swap wETH
+            if (token.tokenAddress != wethAddress) {
+                uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
+                // Approve the swap router to use the token's balance for swap
+                IERC20(token.tokenAddress).approve(address(i_swapRouter), tokenBalance);
+                executeSwap(token.tokenAddress, i_wethAddress, tokenBalance);
+            }
         }
 
+        // Get wETH balance of the vault
         uint256 wethBalance = IERC20(i_wethAddress).balanceOf(address(this));
 
+        // Swap wETH for the new tokens and their corresponding weights
         for (uint8 i; i < newTokens.length; i++) {
             Token memory token = newTokens[i];
-            uint256 amountToSwap = (wethBalance * token.weight) / 100;
-            executeSwap(i_wethAddress, token.tokenAddress, amountToSwap);
+            // No need to swap wETH
+            if (token.tokenAddress != wethAddress) {
+                uint256 amountToSwap = (wethBalance * token.weight) / 100;
+                // Approve the swap router to use the amount of wETH to swap
+                IWETH(wethAddress).approve(address(i_swapRouter), amountToSwap);
+                executeSwap(i_wethAddress, token.tokenAddress, amountToSwap);
+            }
         } 
     }
 
