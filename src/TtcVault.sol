@@ -14,10 +14,11 @@ contract TtcVault is IVault {
     bool private locked;
 
     // Treasury fee is only taken upon redemption
+    // Treasury fee is calculated using BPS (basis points) where 1 basis point is 0.01%
     // Fee is initally set to .1% of redemption amount.
-    uint16 public constant TREASURY_REDEMPTION_FEE = 1e3;
-    uint24 public constant UNISWAP_PRIMARY_POOL_FEE = 1e4;
-    uint24 public constant UNISWAP_SECONDARY_POOL_FEE = 3e3;
+    uint8 public constant TREASURY_REDEMPTION_FEE = 1e1;
+    uint24 public constant UNISWAP_PRIMARY_POOL_FEE = 3e3;
+    uint24 public constant UNISWAP_SECONDARY_POOL_FEE = 1e4;
     uint24 public constant UNISWAP_TERTIARY_POOL_FEE = 5e2;
 
 
@@ -103,7 +104,7 @@ contract TtcVault is IVault {
         return address(i_ttcToken);
     }
 
-    function executeSwap(address tokenIn, address tokenOut, uint amount) internal returns (uint) {
+    function executeSwap(address tokenIn, address tokenOut, uint amount) internal returns (uint256, uint24) {
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
                 tokenIn: tokenIn, // Token to swap
@@ -117,18 +118,18 @@ contract TtcVault is IVault {
             });
 
         // Try swap at primary, secondary, and tertiary fee tiers respectively. 
-        // We prioritize highest to lowest fee tiers since we assume higher fees translates to deeper liquidity and better prices.
+        // Fee priority is 0.3% -> 1% -> 0.05% since we assume most high cap coins will have the best liquidity in the middle, then the highest, then the lowest fee tier.
         // Ideally, optimal routing would be computed off-chain and provided as a parameter to mint. 
         // This is a placeholder to make minting functional for now. 
         try i_swapRouter.exactInputSingle(params) returns (uint256 amountOut) {
-            return amountOut;
+            return (amountOut, params.fee);
         } catch {
             params.fee = UNISWAP_SECONDARY_POOL_FEE;
             try i_swapRouter.exactInputSingle(params) returns (uint256 amountOut) {
-                return amountOut;
+                return (amountOut, params.fee);
             } catch {
                 params.fee = UNISWAP_TERTIARY_POOL_FEE;
-                return i_swapRouter.exactInputSingle(params);
+                return (i_swapRouter.exactInputSingle(params), params.fee);
             }
         }
     }
@@ -140,31 +141,32 @@ contract TtcVault is IVault {
         address wethAddress = i_wethAddress;
 
         // Convert ETH to WETH for token swaps
-        uint amount = msg.value;
-
+        uint256 amountEth = msg.value;
         // Initialize AUM's value in ETH to 0
-        uint aum = 0;
+        uint256 aum = 0;
         // Add current balance of wETH to AUM
         aum += IWETH(wethAddress).balanceOf(address(this));
 
         // Wrap ETH sent in msg.value
-        IWETH(wethAddress).deposit{value: amount}();
+        IWETH(wethAddress).deposit{value: amountEth}();
 
         for (uint i = 0; i < constituentTokens.length; i++) {
             Token memory token = constituentTokens[i];
             // No need to swap wETH
             if (token.tokenAddress != wethAddress) {
                 // Calculate amount of ETH to swap based on token weight in basket
-                uint amountToSwap = (amount * token.weight) / 100;
+                uint256 amountToSwap = (amountEth * token.weight) / 100;
                 // Approve the swap router to use the calculated amount for the swap
                 IWETH(wethAddress).approve(address(i_swapRouter), amountToSwap);
                 // Get current balance of token (represented with the precision of the token's decimals)
-                uint tokenBalance = IERC20(token.tokenAddress).balanceOf(
+                uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(
                     address(this)
                 );
                 // Execute swap and return the tokens received.
                 // tokensReceived is represented with the precision of the tokenOut's decimals
-                uint tokensReceived = executeSwap(i_wethAddress, token.tokenAddress,amountToSwap);
+                (uint256 tokensReceived, uint24 fee) = executeSwap(i_wethAddress, token.tokenAddress,amountToSwap);
+                // Calculate the actual amount swapped after pool fee was deducted
+                uint256 amountSwappedAfterFee = amountToSwap - ((amountToSwap * (fee)) / 1000000);
                 // Adjust the incoming token precision to match that of ETH if not already
                 uint8 tokenDecimals = ERC20(token.tokenAddress).decimals();
                 if (tokenDecimals < 18) {
@@ -175,7 +177,7 @@ contract TtcVault is IVault {
                 // Add the token's value in ETH to AUM.
                 // (amountToSwap / tokensReceived) is the current market price (on Uniswap) of the asset relative to ETH.
                 // (amountToSwap / tokensReceived) multiplied by tokenBalance gives us the value in ETH of the token in the vault prior to the swap
-                aum += (tokenBalance * amountToSwap) / tokensReceived;
+                aum += (tokenBalance * amountSwappedAfterFee) / tokensReceived;
             }
         }
 
@@ -187,7 +189,7 @@ contract TtcVault is IVault {
             // If total supply of TTC > 0, mint a variable number of tokens.
             // Price of TTC (in ETH) prior to this deposit is the AUM (in ETH) prior to deposit divided by the total supply of TTC
             // Amount they deposited in ETH divided by price of TTC (in ETH) is the amount to mint to the minter
-            amountToMint = (amount * totalSupplyTtc) / (aum);
+            amountToMint = (amountEth * totalSupplyTtc) / (aum);
         } else {
             // If total supply of TTC is 0, mint 1 token. First mint sets initial price of TTC.
             amountToMint = 1 * (10 ** i_ttcToken.decimals());
@@ -195,7 +197,7 @@ contract TtcVault is IVault {
         // Mint TTC to the minter
         i_ttcToken.mint(msg.sender, amountToMint);
 
-        emit Minted(msg.sender, amount, amountToMint);
+        emit Minted(msg.sender, amountEth, amountToMint);
     }
 
     function redeem(uint256 ttcAmount) public noReentrancy {
@@ -218,7 +220,7 @@ contract TtcVault is IVault {
             uint256 amountToTransfer = (balanceOfAsset * ttcAmount) /
                 totalSupplyTtc;
             // Calculate fee for Continuum Treasury (set to 0.1%)
-            uint256 fee = (amountToTransfer / TREASURY_REDEMPTION_FEE);
+            uint256 fee = (amountToTransfer * TREASURY_REDEMPTION_FEE) / 10000;
             // Handle WETH redemption specifically
             if (token.tokenAddress == i_wethAddress) {
                 // Convert wETH to ETH
@@ -248,7 +250,6 @@ contract TtcVault is IVault {
     }
 
     function naiveRebalance(Token[10] memory newTokens) public onlyTreasury {
-
         // Comment out for saving API calls while testing on forked mainnet. Already tested it. It works.
         // if (!checkTokenList(initialTokens)) {
         //     revert InvalidTokenList();
