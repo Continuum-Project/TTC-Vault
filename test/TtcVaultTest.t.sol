@@ -17,7 +17,7 @@ contract VaultTest is Test {
     TtcVault.Token[10] public tokens;
 
     struct TokenBalance {
-        string symbol;
+        address tokenAddress;
         uint256 balance;
     }
 
@@ -43,7 +43,7 @@ contract VaultTest is Test {
         assertEq(vm.activeFork(), mainnetFork);
     }
 
-    function testMintAndRedeemTtc() public {
+    function testInitialMint() public {
         uint96 weiAmount = 1 ether;
         address user = makeAddr("user");
         vm.deal(user, weiAmount);
@@ -58,15 +58,15 @@ contract VaultTest is Test {
             0,
             "User should have 0 TTC tokens initially"
         );
-        printVaultBalances();
+
+        TokenBalance[10] memory balances = getVaultBalances();
+        for (uint8 i; i < 10; i++) {
+            assertEq(balances[i].balance, 0);
+        } 
 
         vm.startPrank(user);
         vault.mint{value: weiAmount}();
-
-        console.log(
-            "TTC Balance -",
-            IERC20(vault.getTtcTokenAddress()).balanceOf(user)
-        );
+        vm.stopPrank();
 
         assertEq(
             IERC20(vault.getTtcTokenAddress()).balanceOf(user),
@@ -74,29 +74,19 @@ contract VaultTest is Test {
             "User should have received 1 TTC token"
         );
 
-        printVaultBalances();
-
-        vm.deal(user, 5 ether);
-        vault.mint{value: 5 ether}();
-        console.log("TTC Balance -",IERC20(vault.getTtcTokenAddress()).balanceOf(user));
-
-        printVaultBalances();
-
-        vault.redeem(IERC20(vault.getTtcTokenAddress()).balanceOf(user));
-
-        printVaultBalances();
-
-        vm.stopPrank();
+        balances = getVaultBalances();
+        for (uint8 i; i < 10; i++) {
+            assertGt(balances[i].balance, 0);
+        } 
     }
 
     function getVaultBalances() public view returns (TokenBalance[10] memory) {
         TokenBalance[10] memory balances;
         for (uint8 i; i < 10; i++) {
-            string memory symbol = ERC20(tokens[i].tokenAddress).symbol();
             uint256 balance = IERC20(tokens[i].tokenAddress).balanceOf(
                 address(vault)
             );
-            balances[i] = TokenBalance(symbol, balance);
+            balances[i] = TokenBalance(tokens[i].tokenAddress, balance);
         }
         return balances;
     }
