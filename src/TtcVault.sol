@@ -42,6 +42,13 @@ contract TtcVault is IVault {
         locked = false;
     }
 
+    modifier onlyTreasury() {
+        if (msg.sender != i_continuumTreasury) {
+            revert OnlyTreasury();
+        }
+        _;
+    }
+
     constructor(
         Token[10] memory initialTokens,
         address treasury,
@@ -96,17 +103,17 @@ contract TtcVault is IVault {
         return address(i_ttcToken);
     }
 
-    function executeSwap(uint amount, uint index) internal returns (uint) {
+    function executeSwap(address tokenIn, address tokenOut, uint amount) internal returns (uint) {
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
-                tokenIn: i_wethAddress,
-                tokenOut: constituentTokens[index].tokenAddress,
-                fee: UNISWAP_PRIMARY_POOL_FEE,
-                recipient: address(this),
-                deadline: block.timestamp,
-                amountIn: amount,
-                amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
+                tokenIn: tokenIn, // Token to swap
+                tokenOut: tokenOut, // Token to receive
+                fee: UNISWAP_PRIMARY_POOL_FEE, // Initially set primary fee pool
+                recipient: address(this), // Send tokens to TTC vault
+                deadline: block.timestamp, // Swap must be atomic 
+                amountIn: amount, // Amount of tokenIn to swap
+                amountOutMinimum: 0, // Receive whatever we can get for now (should set in production)
+                sqrtPriceLimitX96: 0 // Ignore for now (should set in production to reduce price impact)
             });
 
         // Try swap at primary, secondary, and tertiary fee tiers respectively. 
@@ -133,7 +140,6 @@ contract TtcVault is IVault {
         address wethAddress = i_wethAddress;
 
         // Convert ETH to WETH for token swaps
-        // uint amount = msg.value - fee;
         uint amount = msg.value;
 
         // Initialize AUM's value in ETH to 0
@@ -156,8 +162,9 @@ contract TtcVault is IVault {
                 uint tokenBalance = IERC20(token.tokenAddress).balanceOf(
                     address(this)
                 );
-                // Execute swap and return the tokens received (represented with the precision of the token's decimals)
-                uint tokensReceived = executeSwap(amountToSwap, i);
+                // Execute swap and return the tokens received.
+                // tokensReceived is represented with the precision of the tokenOut's decimals
+                uint tokensReceived = executeSwap(i_wethAddress, token.tokenAddress,amountToSwap);
                 // Adjust the incoming token precision to match that of ETH if not already
                 uint8 tokenDecimals = ERC20(token.tokenAddress).decimals();
                 if (tokenDecimals < 18) {
@@ -191,14 +198,14 @@ contract TtcVault is IVault {
         emit Minted(msg.sender, amount, amountToMint);
     }
 
-    function redeem(uint256 amount) public noReentrancy {
+    function redeem(uint256 ttcAmount) public noReentrancy {
         uint256 totalSupplyTtc = i_ttcToken.totalSupply();
         // Check if vault is empty
         if (totalSupplyTtc == 0) {
             revert EmptyVault();
         }
         // Check if redeemer has enough TTC to redeem amount
-        if (amount > i_ttcToken.balanceOf(msg.sender)) {
+        if (ttcAmount > i_ttcToken.balanceOf(msg.sender)) {
             revert InvalidRedemptionAmount();
         }
 
@@ -208,7 +215,7 @@ contract TtcVault is IVault {
                 address(this)
             );
             // amount to transfer is balanceOfAsset times the ratio of redemption amount of TTC to total supply
-            uint256 amountToTransfer = (balanceOfAsset * amount) /
+            uint256 amountToTransfer = (balanceOfAsset * ttcAmount) /
                 totalSupplyTtc;
             // Calculate fee for Continuum Treasury (set to 0.1%)
             uint256 fee = (amountToTransfer / TREASURY_REDEMPTION_FEE);
@@ -236,8 +243,30 @@ contract TtcVault is IVault {
         }
 
         // Burn the TTC redeemed
-        i_ttcToken.burn(msg.sender, amount);
-        emit Redeemed(msg.sender, amount);
+        i_ttcToken.burn(msg.sender, ttcAmount);
+        emit Redeemed(msg.sender, ttcAmount);
+    }
+
+    function naiveRebalance(Token[10] memory newTokens) public onlyTreasury {
+
+        // Comment out for saving API calls while testing on forked mainnet. Already tested it. It works.
+        // if (!checkTokenList(initialTokens)) {
+        //     revert InvalidTokenList();
+        // }
+
+        for (uint8 i; i < constituentTokens.length; i++) {
+            Token memory token = constituentTokens[i];
+            uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
+            executeSwap(token.tokenAddress, i_wethAddress, tokenBalance);
+        }
+
+        uint256 wethBalance = IERC20(i_wethAddress).balanceOf(address(this));
+
+        for (uint8 i; i < newTokens.length; i++) {
+            Token memory token = newTokens[i];
+            uint256 amountToSwap = (wethBalance * token.weight) / 100;
+            executeSwap(i_wethAddress, token.tokenAddress, amountToSwap);
+        } 
     }
 
     receive() external payable { }

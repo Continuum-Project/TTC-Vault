@@ -58,6 +58,7 @@ contract VaultTest is Test {
             0,
             "User should have 0 TTC tokens initially"
         );
+        printVaultBalances();
 
         vm.startPrank(user);
         vault.mint{value: weiAmount}();
