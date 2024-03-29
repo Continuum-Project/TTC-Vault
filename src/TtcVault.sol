@@ -14,9 +14,10 @@ contract TtcVault is IVault {
     bool private locked;
 
     // Treasury fee is only taken upon redemption
-    // Treasury fee is calculated using BPS (basis points) where 1 basis point is 0.01%
+    // Treasury fee is denominated in BPS (basis points). 1 basis point = 0.01%
     // Fee is initally set to .1% of redemption amount.
     uint8 public constant TREASURY_REDEMPTION_FEE = 1e1;
+    // Uniswap pool fees are denominated in 100ths of a basis point.
     uint24 public constant UNISWAP_PRIMARY_POOL_FEE = 3e3;
     uint24 public constant UNISWAP_SECONDARY_POOL_FEE = 1e4;
     uint24 public constant UNISWAP_TERTIARY_POOL_FEE = 5e2;
@@ -219,7 +220,7 @@ contract TtcVault is IVault {
             // amount to transfer is balanceOfAsset times the ratio of redemption amount of TTC to total supply
             uint256 amountToTransfer = (balanceOfAsset * ttcAmount) /
                 totalSupplyTtc;
-            // Calculate fee for Continuum Treasury (set to 0.1%)
+            // Calculate fee for Continuum Treasury using BPS
             uint256 fee = (amountToTransfer * TREASURY_REDEMPTION_FEE) / 10000;
             // Handle WETH redemption specifically
             if (token.tokenAddress == i_wethAddress) {
