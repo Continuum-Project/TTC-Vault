@@ -166,24 +166,24 @@ contract TtcVault is IVault {
         uint256 rEthBalanceInEth = i_rocketToken.getEthValue(initialRETHBalance);
         aum += rEthBalanceInEth;
 
-        // Calculate ETH allocation from msg.value
-        uint256 ethAllocation = msg.value * constituentTokens[0].weight;
+        // Calculate rETH allocation from msg.value
+        uint256 rEthAllocation = (msg.value * constituentTokens[0].weight) / 100;
 
-        // Stake the ETH allocation using rocket pool
+        // Stake the rETH allocation using rocket pool
         // Rocket pool minimum amount to stake is 0.01 ETH
-        if (ethAllocation < 0.01 ether) {
+        if (rEthAllocation < 0.01 ether) {
             revert RocketPoolMinimum();
         }
         // Swap ETH for RETH and check if resulting amount is valid
         address rocketDepositPoolAddress = i_rocketStorage.getAddress(keccak256(abi.encodePacked("contract.address", "rocketDepositPool")));
-        RocketDepositPoolInterface(rocketDepositPoolAddress).deposit{value: ethAllocation}();
+        RocketDepositPoolInterface(rocketDepositPoolAddress).deposit{value: rEthAllocation}();
         uint256 resultingRETHBalance = i_rocketToken.balanceOf(address(this));
         if (resultingRETHBalance <= initialRETHBalance) {
             revert ErrorStakingEth();
         }
 
         // Wrap the rest of the ETH to swap for the rest of the tokens
-        IWETH(wethAddress).deposit{value: msg.value - ethAllocation}();
+        IWETH(wethAddress).deposit{value: msg.value - rEthAllocation}();
 
         for (uint i = 1; i < 10; i++) {
             Token memory token = constituentTokens[i];
