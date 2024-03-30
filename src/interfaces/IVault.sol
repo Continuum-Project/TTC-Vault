@@ -3,6 +3,16 @@
 pragma solidity 0.8.20;
 
 interface IVault{
+    // Errors
+    error InvalidTokenList();
+    error MinimumAmountToMint();
+    error EmptyVault();
+    error InvalidRedemptionAmount();
+    error RedemptionTransferFailed();
+    error TreasuryTransferFailed();
+    error NoReentrancy();
+    error OnlyTreasury();
+
     // Events
     /// @notice event for minting
     event Minted(address indexed sender, uint256 ethAmount, uint256 ttcAmount);
