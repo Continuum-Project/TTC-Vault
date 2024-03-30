@@ -30,7 +30,7 @@ contract TtcVault is IVault {
     TTC public immutable i_ttcToken;
     address payable public immutable i_continuumTreasury;
     ISwapRouter public immutable i_swapRouter;
-    address public immutable i_wethAddress;
+    IWETH public immutable i_wethToken;
     RocketStorageInterface public immutable i_rocketStorage;
     RocketTokenRETHInterface public immutable i_rocketToken;
 
@@ -66,15 +66,15 @@ contract TtcVault is IVault {
         address treasury,
         address swapRouterAddress,
         address wethAddress,
-        address rocketStorageAddress,
-        address rocketTokenAddress
+        address rocketStorageAddress
     ) {
         i_ttcToken = new TTC();
         i_continuumTreasury = payable(treasury);
         i_swapRouter = ISwapRouter(swapRouterAddress);
-        i_wethAddress = wethAddress;
+        i_wethToken = IWETH(wethAddress);
         i_rocketStorage = RocketStorageInterface(rocketStorageAddress);
-        i_rocketToken = RocketTokenRETHInterface(rocketTokenAddress);
+        address rEthAddress = i_rocketStorage.getAddress(keccak256(abi.encodePacked("contract.address", "rocketTokenRETH")));
+        i_rocketToken = RocketTokenRETHInterface(rEthAddress);
 
         if (!checkTokenList(initialTokens)) {
             revert InvalidTokenList();
@@ -89,14 +89,14 @@ contract TtcVault is IVault {
     function checkTokenList(
         Token[10] memory tokens
     ) private view returns (bool) {
-        // Make sure the first token is always wETH
-        if (tokens[0].tokenAddress != i_wethAddress) {
+        // Make sure the first token is always rETH
+        if (tokens[0].tokenAddress != address(i_rocketToken) || tokens[0].weight != 50) {
             return false;
         }
 
         uint8 totalWeight;
 
-        for (uint8 i; i < tokens.length; i++) {
+        for (uint8 i; i < 10; i++) {
             // Check weight is > 0
             if (tokens[i].weight == 0) return false;
             totalWeight += tokens[i].weight;
@@ -158,27 +158,25 @@ contract TtcVault is IVault {
     }
 
     function mint() public payable {
-        if (msg.value < 0.01 ether) {
-            revert MinimumAmountToMint();
-        }
-        address wethAddress = i_wethAddress;
-
+        address wethAddress = address(i_wethToken);
         // Initialize AUM's value in ETH to 0
         uint256 aum = 0;
-        // Add current balance of wETH to AUM
-        aum += IWETH(wethAddress).balanceOf(address(this));
+        // Add current balance of rETH (denominated in ETH) to AUM
+        uint256 initialRETHBalance = i_rocketToken.balanceOf(address(this));
+        uint256 rEthBalanceInEth = i_rocketToken.getEthValue(initialRETHBalance);
+        aum += rEthBalanceInEth;
 
         // Calculate ETH allocation from msg.value
         uint256 ethAllocation = msg.value * constituentTokens[0].weight;
 
         // Stake the ETH allocation using rocket pool
-        // Get the deposit pool address
-        address rocketDepositPoolAddress = i_rocketStorage.getAddress(keccak256(abi.encodePacked("contract.address", "rocketDepositPool")));
-        // Initialize the deposit pool
-        RocketDepositPoolInterface rocketDepositPool = RocketDepositPoolInterface(rocketDepositPoolAddress);
+        // Rocket pool minimum amount to stake is 0.01 ETH
+        if (ethAllocation < 0.01 ether) {
+            revert RocketPoolMinimum();
+        }
         // Swap ETH for RETH and check if resulting amount is valid
-        uint256 initialRETHBalance = i_rocketToken.balanceOf(address(this));
-        rocketDepositPool.deposit{value: ethAllocation}();
+        address rocketDepositPoolAddress = i_rocketStorage.getAddress(keccak256(abi.encodePacked("contract.address", "rocketDepositPool")));
+        RocketDepositPoolInterface(rocketDepositPoolAddress).deposit{value: ethAllocation}();
         uint256 resultingRETHBalance = i_rocketToken.balanceOf(address(this));
         if (resultingRETHBalance <= initialRETHBalance) {
             revert ErrorStakingEth();
@@ -199,7 +197,7 @@ contract TtcVault is IVault {
             );
             // Execute swap and return the tokens received.
             // tokensReceived is represented with the precision of the tokenOut's decimals
-            (uint256 tokensReceived, uint24 fee) = executeSwap(i_wethAddress, token.tokenAddress,amountToSwap);
+            (uint256 tokensReceived, uint24 fee) = executeSwap(wethAddress, token.tokenAddress,amountToSwap);
             // Calculate the actual amount swapped after pool fee was deducted
             uint256 amountSwappedAfterFee = amountToSwap - ((amountToSwap * (fee)) / 1000000);
             // Adjust the incoming token precision to match that of ETH if not already
@@ -234,6 +232,7 @@ contract TtcVault is IVault {
     }
 
     function redeem(uint256 ttcAmount) public noReentrancy {
+        address rEthAddress = address(i_rocketToken);
         uint256 totalSupplyTtc = i_ttcToken.totalSupply();
         // Check if vault is empty
         if (totalSupplyTtc == 0) {
@@ -254,14 +253,14 @@ contract TtcVault is IVault {
                 totalSupplyTtc;
             // Calculate fee for Continuum Treasury using BPS
             uint256 fee = (amountToTransfer * TREASURY_REDEMPTION_FEE) / 10000;
-            // Handle WETH redemption specifically
-            if (token.tokenAddress == i_wethAddress) {
-                // Convert wETH to ETH
-                IWETH(i_wethAddress).withdraw(amountToTransfer);
-                // Send ETH to redeemer
-                payable(msg.sender).transfer(amountToTransfer - fee);
-                // Send fee to treasury
-                i_continuumTreasury.transfer(fee);
+            // Handle rETH redemption specifically
+            if (token.tokenAddress == rEthAddress) {
+                // // Convert wETH to ETH
+                // IWETH(i_wethAddress).withdraw(amountToTransfer);
+                // // Send ETH to redeemer
+                // payable(msg.sender).transfer(amountToTransfer - fee);
+                // // Send fee to treasury
+                // i_continuumTreasury.transfer(fee);
             } else {
                 // Transfer tokens to redeemer
                 if(!IERC20(token.tokenAddress).transfer(
@@ -287,32 +286,32 @@ contract TtcVault is IVault {
             revert InvalidTokenList();
         }
 
-        address wethAddress = i_wethAddress;
+        address rEthAddress = address(i_rocketToken);
 
         // Swap all tokens for wETH
         for (uint8 i; i < constituentTokens.length; i++) {
             Token memory token = constituentTokens[i];
             // No need to swap wETH
-            if (token.tokenAddress != wethAddress) {
+            if (token.tokenAddress != rEthAddress) {
                 uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
                 // Approve the swap router to use the token's balance for swap
                 IERC20(token.tokenAddress).approve(address(i_swapRouter), tokenBalance);
-                executeSwap(token.tokenAddress, i_wethAddress, tokenBalance);
+                executeSwap(token.tokenAddress, rEthAddress, tokenBalance);
             }
         }
 
         // Get wETH balance of the vault
-        uint256 wethBalance = IERC20(i_wethAddress).balanceOf(address(this));
+        uint256 wethBalance = IERC20(rEthAddress).balanceOf(address(this));
 
         // Swap wETH for the new tokens and their corresponding weights
         for (uint8 i; i < newTokens.length; i++) {
             Token memory token = newTokens[i];
             // No need to swap wETH
-            if (token.tokenAddress != wethAddress) {
+            if (token.tokenAddress != rEthAddress) {
                 uint256 amountToSwap = (wethBalance * token.weight) / 100;
                 // Approve the swap router to use the amount of wETH to swap
-                IWETH(wethAddress).approve(address(i_swapRouter), amountToSwap);
-                executeSwap(i_wethAddress, token.tokenAddress, amountToSwap);
+                IWETH(rEthAddress).approve(address(i_swapRouter), amountToSwap);
+                executeSwap(rEthAddress, token.tokenAddress, amountToSwap);
             }
         } 
     }

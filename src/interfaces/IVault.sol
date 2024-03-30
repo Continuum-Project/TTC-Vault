@@ -12,6 +12,8 @@ interface IVault{
     error TreasuryTransferFailed();
     error NoReentrancy();
     error OnlyTreasury();
+    error RocketPoolMinimum();
+    error ErrorStakingEth();
 
     // Events
     /// @notice event for minting
