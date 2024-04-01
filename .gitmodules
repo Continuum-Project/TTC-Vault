@@ -22,3 +22,6 @@
 [submodule "lib/balancer-v2-monorepo"]
 	path = lib/balancer-v2-monorepo
 	url = https://github.com/balancer/balancer-v2-monorepo
+[submodule "lib/rocketpool-router"]
+	path = lib/rocketpool-router
+	url = https://github.com/rocket-pool/rocketpool-router

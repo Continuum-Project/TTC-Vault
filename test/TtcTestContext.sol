@@ -11,15 +11,25 @@ contract TtcTestContext is Test {
 
     uint256 mainnetFork;
 
-    address constant SWAP_ROUTER_ADDRESS =
+    address constant UNISWAP_SWAP_ROUTER_ADDRESS =
         address(0xE592427A0AEce92De3Edee1F18E0157C05861564);
     address constant WETH_ADDRESS =
         address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     address constant RETH_ADDRESS =
         address(0xae78736Cd615f374D3085123A210448E74Fc6393);
+    address constant ROCKET_SWAP_ROUTER_ADDRESS =
+        address(0x16D5A408e807db8eF7c578279BEeEe6b228f1c1C);
 
     TtcVault public vault;
     TtcVault.Token[10] public tokens;
+
+    function calculateOptimalREthRoute(uint256 _amountIn) public returns (uint[2] memory portions, uint amountOut) {
+        return RocketSwapRouter(payable(ROCKET_SWAP_ROUTER_ADDRESS)).optimiseSwapTo(_amountIn, 10);
+    }
+
+    function calculateOptimalREthRoute(uint256 _amountIn, uint256 _steps) public returns (uint[2] memory portions, uint amountOut) {
+        return RocketSwapRouter(payable(ROCKET_SWAP_ROUTER_ADDRESS)).optimiseSwapTo(_amountIn, _steps);
+    }
 
     function getVaultBalances() public view returns (TokenBalance[10] memory) {
         TokenBalance[10] memory balances;

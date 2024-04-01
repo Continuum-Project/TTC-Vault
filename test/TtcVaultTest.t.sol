@@ -7,7 +7,6 @@ import "../src/TtcVault.sol";
 import "./TtcTestContext.sol";
 
 contract VaultTest is TtcTestContext {
-
     function setUp() public {
         try vm.createFork(vm.envString("ALCHEMY_MAINNET_RPC_URL")) returns (
             uint256 forkId
@@ -20,11 +19,11 @@ contract VaultTest is TtcTestContext {
         address treasury = makeAddr("treasury");
         setUpTokens();
         vault = new TtcVault(
-            tokens,
             treasury,
-            SWAP_ROUTER_ADDRESS,
+            UNISWAP_SWAP_ROUTER_ADDRESS,
             WETH_ADDRESS,
-            RETH_ADDRESS
+            ROCKET_SWAP_ROUTER_ADDRESS,
+            tokens
         );
     }
 
@@ -46,13 +45,17 @@ contract VaultTest is TtcTestContext {
                 "Initial vault balances should be 0"
             );
         }
-        printVaultBalances();
+ 
 
         vm.startPrank(user);
-        vault.mint{value: weiAmount}();
+        uint256 amountEthToREth = (weiAmount * tokens[0].weight) / 100;
+        (uint[2] memory portions, uint amountOut) = calculateOptimalREthRoute(
+            amountEthToREth
+        );
+        vault.mint{value: weiAmount}(portions, amountOut);
         vm.stopPrank();
 
-        printVaultBalances();
+       
 
         assertEq(
             IERC20(vault.getTtcTokenAddress()).balanceOf(user),
@@ -107,9 +110,13 @@ contract VaultTest is TtcTestContext {
                 "Initial vault balances should be 0"
             );
         }
-
+      
         vm.startPrank(user);
-        vault.mint{value: weiAmount}();
+        uint256 amountEthToREth = (weiAmount * tokens[0].weight) / 100;
+        (uint[2] memory portions, uint amountOut) = calculateOptimalREthRoute(
+            amountEthToREth
+        );
+        vault.mint{value: weiAmount}(portions, amountOut);
 
         assertEq(
             IERC20(vault.getTtcTokenAddress()).balanceOf(user),
@@ -125,10 +132,12 @@ contract VaultTest is TtcTestContext {
                 "Post-mint vault balances should be greater than 0"
             );
         }
-
-        weiAmount = 3 ether;
+       
+        weiAmount = 5 ether;
         vm.deal(user, weiAmount);
-        vault.mint{value: weiAmount}();
+        amountEthToREth = (weiAmount * tokens[0].weight) / 100;
+        (portions, amountOut) = calculateOptimalREthRoute(amountEthToREth);
+        vault.mint{value: weiAmount}(portions, amountOut);
         vm.stopPrank();
 
         assertGt(
@@ -145,6 +154,7 @@ contract VaultTest is TtcTestContext {
                 "Post-second mint vault balances should be greater than post-first mint balances"
             );
         }
+   
     }
 
     function testNaiveReconstitution() public {
@@ -160,6 +170,5 @@ contract VaultTest is TtcTestContext {
         vm.stopPrank();
 
         printVaultBalances();
-
     }
 }

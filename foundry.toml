@@ -1,7 +1,7 @@
 [profile.default]
 version = "0.8.20"
 optimizer = true
-optimizer_runs = 100
+optimizer_runs = 1000
 src = "src"
 out = "out"
 libs = ["lib"]
@@ -11,7 +11,7 @@ remappings = [
     "@uniswap/v3-periphery/=lib/v3-periphery/",
     "@uniswap/v3-core/=lib/v3-core/",
     "@rocketpool/contracts/=lib/rocketpool/contracts/",
-    "@balancer/pkg/=lib/balancer-v2-monorepo/pkg/
+    "@rocketpool-router/contracts/=lib/rocketpool-router/contracts/"
 ]
 # gas_reports = ["*"]
 

@@ -2,7 +2,7 @@
 
 pragma solidity 0.8.20;
 
-interface IVault {
+interface ITtcVault {
     // Errors
     error InvalidTokenList();
     error MinimumAmountToMint();
@@ -12,6 +12,7 @@ interface IVault {
     error TreasuryTransferFailed();
     error NoReentrancy();
     error OnlyTreasury();
+    error REthMaxSlippageExceeded();
 
     // Events
     /// @notice event for minting
@@ -22,7 +23,7 @@ interface IVault {
 
     // Methods
     /// @notice mint tokens for msg.value to msg.sender
-    function mint() external payable;
+    function mint(uint256[2] memory portions, uint256 amountOut) external payable;
 
     /// @notice Return constituents to msg.sender and burn
     function redeem(uint256 amount) external;
