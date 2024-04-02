@@ -178,9 +178,9 @@ contract VaultTest is TtcTestContext {
 
         for (uint8 i; i < 10; i++) {
             if (i == 0) {
-                assertEq(IERC20(initialBalances[i].tokenAddress).balanceOf(address(vault)), IERC20(newBalances[i].tokenAddress).balanceOf(address(vault)));
+                assertEq(initialBalances[i].balance, newBalances[i].balance);
             } else {
-                assertFalse(IERC20(initialBalances[i].tokenAddress).balanceOf(address(vault)) == IERC20(newBalances[i].tokenAddress).balanceOf(address(vault)));
+                assertFalse(initialBalances[i].balance == newBalances[i].balance);
             }
         }
     }

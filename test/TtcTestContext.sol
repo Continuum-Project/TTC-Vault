@@ -142,7 +142,7 @@ contract TtcTestContext is Test {
         // SHIB Token
         tokens[1] = (
             TtcVault.Token(
-                10,
+                5,
                 address(0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE)
             )
         );
@@ -156,7 +156,7 @@ contract TtcTestContext is Test {
         // LINK Token
         tokens[3] = (
             TtcVault.Token(
-                2,
+                7,
                 address(0x514910771AF9Ca656af840dff83E8264EcF986CA)
             )
         );
