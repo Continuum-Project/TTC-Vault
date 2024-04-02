@@ -1,17 +1,17 @@
 # TtcVault
-[Git Source](https://github.com/ShivaanshK/TTC-Vault/blob/9afdf9e16d0c34ee3b5a58315a9ae2895ed6a300/src/TtcVault.sol)
+[Git Source](https://github.com/ShivaanshK/TTC-Vault/blob/b86920bac5e81589975ec2622265bc4f4e9a9cfe/src/TtcVault.sol)
 
 **Inherits:**
-[ITtcVault](/src/interfaces/ITtcVault.sol/interface.ITtcVault.md), Test
+[ITtcVault](/src/interfaces/ITtcVault.sol/interface.ITtcVault.md)
 
 **Author:**
 Shivaansh Kapoor
 
-Vault contract for Continuum's first product: TTC (Top Ten Continuum)
+Vault for Continuum's first product: TTC (Top Ten Continuum) Token
 
-A TTC token is a fungible asset backed by a basket of the top 10 ERC20 tokens by market cap (the allocation of each token depends on its market cap relative to others)
+TTC tokens are fungible assets backed by a basket of the top 10 ERC20 tokens by market cap (the allocation of each token depends on its market cap relative to others)
 
-The TtcVault allows for minting TTC tokens with ETH and redeeming TTC tokens for ETH
+The TtcVault allows for minting TTC tokens with ETH and redeeming TTC tokens for its constituent tokens
 
 The vault also undergoes periodic reconstitutions
 
@@ -220,13 +220,13 @@ Reconstitutes the vault's portfolio with a new set of tokens.
 
 
 ```solidity
-function naiveReconstitution(Token[10] memory newTokens) public onlyTreasury;
+function naiveReconstitution(Token[10] memory _newTokens) public onlyTreasury;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`newTokens`|`Token[10]`|The new set of tokens and their allocations for the vault.|
+|`_newTokens`|`Token[10]`|The new set of tokens and their allocations for the vault.|
 
 
 ### receive
