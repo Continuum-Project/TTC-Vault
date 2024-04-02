@@ -166,7 +166,7 @@ contract VaultTest is TtcTestContext {
         address treasury = makeAddr("treasury");
         testInitialMint();
 
-        printVaultBalances();
+        TokenBalance[10] memory initialBalances = getVaultBalances();
 
         setUpNewTokens();
 
@@ -174,6 +174,10 @@ contract VaultTest is TtcTestContext {
         vault.naiveReconstitution(tokens);
         vm.stopPrank();
 
-        printVaultBalances();
+        TokenBalance[10] memory newBalances = getVaultBalances();
+
+        for (uint8 i; i < 10; i++) {
+            assertFalse(IERC20(initialBalances[i].tokenAddress).balanceOf(address(vault)) == IERC20(newBalances[i].tokenAddress).balanceOf(address(vault)));
+        }
     }
 }

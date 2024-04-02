@@ -49,7 +49,7 @@ contract TtcVault is ITtcVault {
     Token[10] constituentTokens;
 
     // Amount of ETH allocated into rEth so far (after swap fees)
-    uint256 private ethAllocationREth = 0;
+    uint256 private ethAllocationREth;
     // Flag to check for reentrancy
     bool private locked;
 
