@@ -177,7 +177,11 @@ contract VaultTest is TtcTestContext {
         TokenBalance[10] memory newBalances = getVaultBalances();
 
         for (uint8 i; i < 10; i++) {
-            assertFalse(IERC20(initialBalances[i].tokenAddress).balanceOf(address(vault)) == IERC20(newBalances[i].tokenAddress).balanceOf(address(vault)));
+            if (i == 0) {
+                assertEq(IERC20(initialBalances[i].tokenAddress).balanceOf(address(vault)), IERC20(newBalances[i].tokenAddress).balanceOf(address(vault)));
+            } else {
+                assertFalse(IERC20(initialBalances[i].tokenAddress).balanceOf(address(vault)) == IERC20(newBalances[i].tokenAddress).balanceOf(address(vault)));
+            }
         }
     }
 }
