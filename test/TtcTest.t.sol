@@ -16,7 +16,7 @@ contract TtcTest is Test{
     }
 
     function testTokenName() public view {
-        assertEq(ttcToken.name(), "Top Ten Coin");
+        assertEq(ttcToken.name(), "Top Ten Continuum");
     }
 
     function testTokenSymbol() public view {
