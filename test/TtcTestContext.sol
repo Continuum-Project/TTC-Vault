@@ -31,6 +31,15 @@ contract TtcTestContext is Test {
         return RocketSwapRouter(payable(ROCKET_SWAP_ROUTER_ADDRESS)).optimiseSwapTo(_amountIn, _steps);
     }
 
+    function calculateOptimalEthRoute(uint256 _amountIn) public returns (uint[2] memory portions, uint amountOut) {
+        return RocketSwapRouter(payable(ROCKET_SWAP_ROUTER_ADDRESS)).optimiseSwapFrom(_amountIn, 10);
+    }
+
+    function calculateOptimalEthRoute(uint256 _amountIn, uint256 _steps) public returns (uint[2] memory portions, uint amountOut) {
+        return RocketSwapRouter(payable(ROCKET_SWAP_ROUTER_ADDRESS)).optimiseSwapFrom(_amountIn, _steps);
+    }
+
+
     function getVaultBalances() public view returns (TokenBalance[10] memory) {
         TokenBalance[10] memory balances;
         for (uint8 i; i < 10; i++) {

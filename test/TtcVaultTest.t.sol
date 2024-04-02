@@ -78,7 +78,12 @@ contract VaultTest is TtcTestContext {
         testInitialMint();
 
         vm.startPrank(user);
-        vault.redeem(1 * (10 ** 18));
+        uint256 ttcBalance = (vault.i_ttcToken()).balanceOf(user);
+        uint256 amountREthToEth = ((vault.i_rEthToken()).balanceOf(address(vault)) * ttcBalance) / (vault.i_ttcToken()).totalSupply();
+        (uint[2] memory portions, uint amountOut) = calculateOptimalEthRoute(
+            amountREthToEth
+        );
+        vault.redeem(ttcBalance, portions, amountOut);
         vm.stopPrank();
 
         assertEq(

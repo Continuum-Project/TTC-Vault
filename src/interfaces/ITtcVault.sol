@@ -12,7 +12,7 @@ interface ITtcVault {
     error TreasuryTransferFailed();
     error NoReentrancy();
     error OnlyTreasury();
-    error REthMaxSlippageExceeded();
+    error RocketSwapMaxSlippageExceeded();
 
     // Events
     /// @notice event for minting
@@ -23,8 +23,8 @@ interface ITtcVault {
 
     // Methods
     /// @notice mint tokens for msg.value to msg.sender
-    function mint(uint256[2] memory portions, uint256 amountOut) external payable;
+    function mint(uint256[2] memory _rocketSwapPortions, uint256 _minREthAmountOut) external payable;
 
     /// @notice Return constituents to msg.sender and burn
-    function redeem(uint256 amount) external;
+    function redeem(uint256 _ttcAmount, uint256[2] memory _rocketSwapPortions, uint256 _minEthAmountOut) external;
 }

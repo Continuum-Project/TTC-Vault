@@ -29,8 +29,8 @@ contract TtcVault is ITtcVault, Test {
     uint24 public constant UNISWAP_TERTIARY_POOL_FEE = 5e2;
     // Balancer rETH/wETH swap fee is 0.04%
     uint24 public constant BALANCER_STABLE_POOL_FEE = 4e2;
-    // Max slippage allowed for rETH swap
-    uint24 public constant MAX_RETH_SLIPPAGE = 3e1;
+    // Max slippage allowed for rocket swap
+    uint24 public constant MAX_ROCKET_SWAP_SLIPPAGE = 3e1;
 
     // Immutable globals
     TTC public immutable i_ttcToken;
@@ -49,6 +49,8 @@ contract TtcVault is ITtcVault, Test {
     // Current tokens and their allocations in the vault
     Token[10] constituentTokens;
 
+    // Amount of ETH allocated into rEth so far (after swap fees)
+    uint256 private ethAllocationREth = 0;
     // Flag to check for reentrancy
     bool private locked;
 
@@ -101,44 +103,6 @@ contract TtcVault is ITtcVault, Test {
     }
 
     /**
-     * @notice Checks the validity of the initial token list setup for the vault.
-     * @param _tokens The array of tokens to check.
-     * @return bool Returns true if the token list is valid, otherwise false.
-     */
-    function checkTokenList(
-        Token[10] memory _tokens
-    ) private view returns (bool) {
-        // Make sure the first token is always rETH
-        if (
-            _tokens[0].tokenAddress != address(i_rEthToken) ||
-            _tokens[0].weight != 50
-        ) {
-            return false;
-        }
-
-        uint8 totalWeight;
-
-        for (uint8 i; i < 10; i++) {
-            // Check weight is > 0
-            if (_tokens[i].weight == 0) return false;
-            totalWeight += _tokens[i].weight;
-
-            // Check if token is a fungible token
-            IERC20(_tokens[i].tokenAddress).totalSupply();
-
-            // Check for any duplicate tokens
-            for (uint8 j = i + 1; j < _tokens.length; j++) {
-                if (_tokens[i].tokenAddress == _tokens[j].tokenAddress) {
-                    return false;
-                }
-            }
-        }
-
-        // Check sum of weights is 100
-        return (totalWeight == 100);
-    }
-
-    /**
      * @notice Gets the address of the TTC token contract.
      * @return ttcAddress The address of the TTC token contract.
      */
@@ -149,62 +113,53 @@ contract TtcVault is ITtcVault, Test {
     /**
      * @notice Mints TTC tokens in exchange for ETH sent to the contract.
      * @notice The amount of TTC minted is based on the amount of ETH sent, the pre-mint valuation of the vault's assets in ETH, and the pre-mint total supply of TTC.
-     * @param _portionsREth amount of ETH to swap for rETH using uniswap and balancer are portions[0] and portions[1] respectively
-     * @param _minREthAmountOut minimum amountOut for rETH swap
+     * @param _rocketSwapPortions amount of ETH to swap for rETH using uniswap and balancer are portions[0] and portions[1] respectively
+     * @param _minREthAmountOut minimum amount of rETH received from rocket swap
      */
-    function mint(
-        uint256[2] memory _portionsREth,
-        uint256 _minREthAmountOut
-    ) public payable {
+    function mint(uint256[2] memory _rocketSwapPortions, uint256 _minREthAmountOut) public payable {
         if (msg.value < 0.01 ether) {
             revert MinimumAmountToMint();
         }
-
-        address wEthAddress = address(i_wEthToken);
-
         // Initialize AUM's value in ETH to 0
-        uint256 aum;
+        uint256 aum = 0;
         // Variable to keep track of actual amount of eth contributed to vault after swap fees
-        uint256 ethMintAmountAfterFees;
+        uint256 ethMintAmountAfterFees = 0;
 
         // Get amount of ETH to swap for rETH
-        uint256 amountEthForREth = (msg.value * constituentTokens[0].weight) / 100;
+        uint256 ethAmountForREth = (msg.value * constituentTokens[0].weight) / 100;
         // Check that _minREthAmount doesn't differ from the expected amount of rETH from rocket pool by more than 0.3% (this value can eventually be set by governance)
-        if (_minREthAmountOut < (i_rEthToken.getRethValue(amountEthForREth) * (10000 - MAX_RETH_SLIPPAGE)) / 10000) {
-            revert REthMaxSlippageExceeded();
+        if (_minREthAmountOut < (i_rEthToken.getRethValue(ethAmountForREth) * (10000 - MAX_ROCKET_SWAP_SLIPPAGE)) / 10000) {
+            revert RocketSwapMaxSlippageExceeded();
         }
         // Execute the rocket swap
         uint256 initialREthBalance = i_rEthToken.balanceOf(address(this));
-        executeRocketSwap(amountEthForREth, _portionsREth[0], _portionsREth[1], _minREthAmountOut);
+        executeRocketSwapTo(ethAmountForREth, _rocketSwapPortions[0], _rocketSwapPortions[1], _minREthAmountOut);
         uint256 resultingREthBalance = i_rEthToken.balanceOf(address(this));
         // Get the pre-swap value of rETH (in ETH) in the vault based on the swap price
-        aum += ((initialREthBalance * amountEthForREth) / (resultingREthBalance - initialREthBalance));
-        ethMintAmountAfterFees += (amountEthForREth - calculateRocketSwapFee(amountEthForREth, _portionsREth[0], _portionsREth[1]));
+        aum += ((initialREthBalance * ethAmountForREth) / (resultingREthBalance - initialREthBalance));
+        ethMintAmountAfterFees +=
+            (ethAmountForREth - calculateRocketSwapFee(ethAmountForREth, _rocketSwapPortions[0], _rocketSwapPortions[1]));
+        ethAllocationREth += ethMintAmountAfterFees;
+        console.log("RETH Allocation", ethAllocationREth);
 
-        // Rest of the ETH will be used for the other tokenSwaps
-        uint256 amountEthForTokenSwaps = msg.value - amountEthForREth;
-        IWETH(wEthAddress).deposit{value: amountEthForTokenSwaps}();
-        IWETH(wEthAddress).approve(address(i_swapRouter), amountEthForTokenSwaps);
+        // Rest of the ETH must be wrapped for the other tokenSwaps
+        address wEthAddress = address(i_wEthToken);
+        uint256 ethAmountForTokenSwaps = msg.value - ethAmountForREth;
+        IWETH(wEthAddress).deposit{value: ethAmountForTokenSwaps}();
+        IWETH(wEthAddress).approve(address(i_swapRouter), ethAmountForTokenSwaps);
 
         for (uint256 i = 1; i < 10; i++) {
             Token memory token = constituentTokens[i];
             // Calculate amount of ETH to swap based on token weight in basket
             uint256 amountToSwap = (msg.value * token.weight) / 100;
             // Get pre-swap balance of token (represented with the precision of the token's decimals)
-            uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(
-                address(this)
-            );
+            uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
             // Execute swap and return the tokens received and fee pool which swap executed in
             // tokensReceived is represented with the precision of the tokenOut's decimals
-            (uint256 tokensReceived, uint24 swapFee) = executeUniswapSwap(
-                wEthAddress,
-                token.tokenAddress,
-                amountToSwap
-            );
+            (uint256 tokensReceived, uint24 swapFee) = executeUniswapSwap(wEthAddress, token.tokenAddress, amountToSwap);
             // Calculate the actual amount swapped after pool fee was deducted
-            uint256 amountSwappedAfterFee = amountToSwap -
-                ((amountToSwap * swapFee) / 1000000);
-                ethMintAmountAfterFees += amountSwappedAfterFee;
+            uint256 amountSwappedAfterFee = amountToSwap - ((amountToSwap * swapFee) / 1000000);
+            ethMintAmountAfterFees += amountSwappedAfterFee;
             // Adjust the incoming token precision to match that of ETH if not already
             uint8 tokenDecimals = ERC20(token.tokenAddress).decimals();
             if (tokenDecimals < 18) {
@@ -240,10 +195,11 @@ contract TtcVault is ITtcVault, Test {
     /**
      * @notice Redeems TTC tokens for a proportional share of the vault's assets.
      * @param _ttcAmount The amount of TTC tokens to redeem.
+     * @param _rocketSwapPortions amount of rETH to swap for ETH using uniswap and balancer are portions[0] and portions[1] respectively
+     * @param _minEthAmountOut minimum amount of ETH received from rocket swap
      */
-    function redeem(uint256 _ttcAmount) public noReentrant {
+    function redeem(uint256 _ttcAmount, uint256[2] memory _rocketSwapPortions, uint256 _minEthAmountOut) public noReentrant {
         uint256 totalSupplyTtc = i_ttcToken.totalSupply();
-        address wEthAddress = address(i_wEthToken);
         // Check if vault is empty
         if (totalSupplyTtc == 0) {
             revert EmptyVault();
@@ -253,43 +209,35 @@ contract TtcVault is ITtcVault, Test {
             revert InvalidRedemptionAmount();
         }
 
-        for (uint8 i; i < constituentTokens.length; i++) {
+        // Handle rETH redemption and keep profit to fund reconstitution
+        uint256 rEthRedemptionAmount = (i_rEthToken.balanceOf(address(this)) * _ttcAmount) / totalSupplyTtc;
+        if (_minEthAmountOut < (i_rEthToken.getRethValue(rEthRedemptionAmount) * (10000 - MAX_ROCKET_SWAP_SLIPPAGE)) / 10000) {
+            revert RocketSwapMaxSlippageExceeded();
+        } 
+        uint256 ethAllocationAmountPostSwap = ((ethAllocationREth * _ttcAmount) / totalSupplyTtc) - calculateRocketSwapFee(rEthRedemptionAmount, _rocketSwapPortions[0], _rocketSwapPortions[1]);
+        uint256 initialEthBalance = address(this).balance;
+        executeRocketSwapFrom(rEthRedemptionAmount, _rocketSwapPortions[0], _rocketSwapPortions[1], _minEthAmountOut);
+        uint256 resultingEthBalance = address(this).balance;
+        uint256 rEthProfit = (resultingEthBalance - initialEthBalance) - ethAllocationAmountPostSwap;
+        uint256 fee = ((ethAllocationAmountPostSwap * TREASURY_REDEMPTION_FEE) / 10000);
+        payable(msg.sender).transfer(ethAllocationAmountPostSwap - fee);
+        i_continuumTreasury.transfer(fee + rEthProfit);
+
+
+        for (uint8 i = 1; i < 10; i++) {
             Token memory token = constituentTokens[i];
-            uint256 balanceOfAsset = IERC20(token.tokenAddress).balanceOf(
-                address(this)
-            );
+            uint256 balanceOfAsset = IERC20(token.tokenAddress).balanceOf(address(this));
             // amount to transfer is balanceOfAsset times the ratio of redemption amount of TTC to total supply
-            uint256 amountToTransfer = (balanceOfAsset * _ttcAmount) /
-                totalSupplyTtc;
+            uint256 amountToTransfer = (balanceOfAsset * _ttcAmount) / totalSupplyTtc;
             // Calculate fee for Continuum Treasury using BPS
-            uint256 fee = (amountToTransfer * TREASURY_REDEMPTION_FEE) / 10000;
-            // Handle WETH redemption specifically
-            if (token.tokenAddress == wEthAddress) {
-                // Convert wETH to ETH
-                i_wEthToken.withdraw(amountToTransfer);
-                // Send ETH to redeemer
-                payable(msg.sender).transfer(amountToTransfer - fee);
-                // Send fee to treasury
-                i_continuumTreasury.transfer(fee);
-            } else {
-                // Transfer tokens to redeemer
-                if (
-                    !IERC20(token.tokenAddress).transfer(
-                        msg.sender,
-                        (amountToTransfer - fee)
-                    )
-                ) {
-                    revert RedemptionTransferFailed();
-                }
-                // Transfer fee to treasury
-                if (
-                    !IERC20(token.tokenAddress).transfer(
-                        i_continuumTreasury,
-                        fee
-                    )
-                ) {
-                    revert TreasuryTransferFailed();
-                }
+            fee = (amountToTransfer * TREASURY_REDEMPTION_FEE) / 10000;
+            // Transfer tokens to redeemer
+            if (!IERC20(token.tokenAddress).transfer(msg.sender, (amountToTransfer - fee))) {
+                revert RedemptionTransferFailed();
+            }
+            // Transfer fee to treasury
+            if (!IERC20(token.tokenAddress).transfer(i_continuumTreasury, fee)) {
+                revert TreasuryTransferFailed();
             }
         }
 
@@ -302,9 +250,7 @@ contract TtcVault is ITtcVault, Test {
      * @notice Reconstitutes the vault's portfolio with a new set of tokens.
      * @param newTokens The new set of tokens and their allocations for the vault.
      */
-    function naiveReconstitution(
-        Token[10] memory newTokens
-    ) public onlyTreasury {
+    function naiveReconstitution(Token[10] memory newTokens) public onlyTreasury {
         // Comment out for saving API calls while testing on forked mainnet. Already tested it. It works.
         // if (!checkTokenList(initialTokens)) {
         //     revert InvalidTokenList();
@@ -317,19 +263,10 @@ contract TtcVault is ITtcVault, Test {
             Token memory token = constituentTokens[i];
             // No need to swap wETH
             if (token.tokenAddress != wEthAddress) {
-                uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(
-                    address(this)
-                );
+                uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
                 // Approve the swap router to use the token's balance for swap
-                IERC20(token.tokenAddress).approve(
-                    address(i_swapRouter),
-                    tokenBalance
-                );
-                executeUniswapSwap(
-                    token.tokenAddress,
-                    wEthAddress,
-                    tokenBalance
-                );
+                IERC20(token.tokenAddress).approve(address(i_swapRouter), tokenBalance);
+                executeUniswapSwap(token.tokenAddress, wEthAddress, tokenBalance);
             }
         }
 
@@ -344,11 +281,7 @@ contract TtcVault is ITtcVault, Test {
                 uint256 amountToSwap = (wethBalance * token.weight) / 100;
                 // Approve the swap router to use the amount of wETH to swap
                 IWETH(wEthAddress).approve(address(i_swapRouter), amountToSwap);
-                executeUniswapSwap(
-                    wEthAddress,
-                    token.tokenAddress,
-                    amountToSwap
-                );
+                executeUniswapSwap(wEthAddress, token.tokenAddress, amountToSwap);
             }
         }
     }
@@ -358,36 +291,97 @@ contract TtcVault is ITtcVault, Test {
      */
     receive() external payable {}
 
+    /**
+     * @notice Checks the validity of the initial token list setup for the vault.
+     * @param _tokens The array of tokens to check.
+     * @return bool Returns true if the token list is valid, otherwise false.
+     */
+    function checkTokenList(Token[10] memory _tokens) internal view returns (bool) {
+        // Make sure the first token is always rETH
+        if (_tokens[0].tokenAddress != address(i_rEthToken) || _tokens[0].weight != 50) {
+            return false;
+        }
+
+        uint8 totalWeight;
+
+        for (uint8 i; i < 10; i++) {
+            // Check weight is > 0
+            if (_tokens[i].weight == 0) return false;
+            totalWeight += _tokens[i].weight;
+
+            // Check if token is a fungible token
+            IERC20(_tokens[i].tokenAddress).totalSupply();
+
+            // Check for any duplicate tokens
+            for (uint8 j = i + 1; j < _tokens.length; j++) {
+                if (_tokens[i].tokenAddress == _tokens[j].tokenAddress) {
+                    return false;
+                }
+            }
+        }
+
+        // Check sum of weights is 100
+        return (totalWeight == 100);
+    }
 
     /**
-     * @notice Calculate total fee for a rocket swap
+     * @notice Execute ETH->rETH swap using rocket swap router
      * @param _amountEthToSwap The amount of ETH to swap
      * @param _uniswapPortion Portion to swap using uniswap
      * @param _balancerPortion Portion to swap using balancer
      * @param _minREthAmountOut Minimum amount of RETH to receive
      */
-    function executeRocketSwap(uint256 _amountEthToSwap, uint256 _uniswapPortion, uint256 _balancerPortion, uint256 _minREthAmountOut) internal {
+    function executeRocketSwapTo(
+        uint256 _amountEthToSwap,
+        uint256 _uniswapPortion,
+        uint256 _balancerPortion,
+        uint256 _minREthAmountOut
+    ) internal {
         // Swap rETH for ETH using provided route
         i_rocketSwapRouter.swapTo{value: _amountEthToSwap}(
-            _uniswapPortion,
-            _balancerPortion,
-            _minREthAmountOut,
-            _minREthAmountOut
+            _uniswapPortion, _balancerPortion, _minREthAmountOut, _minREthAmountOut
+        );
+    }
+
+    /**
+     * @notice Execute rETH->ETH swap using rocket swap router
+     * @param _amountREthToSwap The amount of ETH to swap
+     * @param _uniswapPortion Portion to swap using uniswap
+     * @param _balancerPortion Portion to swap using balancer
+     * @param _minREthAmountOut Minimum amount of RETH to receive
+     */
+    function executeRocketSwapFrom(
+        uint256 _amountREthToSwap,
+        uint256 _uniswapPortion,
+        uint256 _balancerPortion,
+        uint256 _minREthAmountOut
+    ) internal {
+        // Approve rocket swap router to spend the tokens
+        i_rEthToken.approve(address(i_rocketSwapRouter), _amountREthToSwap);
+        // Swap rETH for ETH using provided route
+        i_rocketSwapRouter.swapFrom(
+            _uniswapPortion, _balancerPortion, _minREthAmountOut, _minREthAmountOut, _amountREthToSwap
         );
     }
 
     /**
      * @notice Calculate the total fee for a rocket swap
-     * @param _amountEthToSwap The amount of ETH to swap
+     * @param _amountToSwap The amount of ETH or rETH to swap
      * @param _uniswapPortion Portion to swap using uniswap
      * @param _balancerPortion Portion to swap using balancer
      * @return fee The total fee for the swap
      */
-    function calculateRocketSwapFee(uint256 _amountEthToSwap, uint256 _uniswapPortion, uint256 _balancerPortion) internal pure returns (uint256 fee) {
+    function calculateRocketSwapFee(uint256 _amountToSwap, uint256 _uniswapPortion, uint256 _balancerPortion)
+        internal
+        pure
+        returns (uint256 fee)
+    {
         uint256 totalPortions = _uniswapPortion + _balancerPortion;
         // Rocket swap router uses 0.05% fee tier for uniswap
-        uint256 uniswapSwapFee = (((_amountEthToSwap * _uniswapPortion) / totalPortions) * UNISWAP_TERTIARY_POOL_FEE)/ 1000000;
-        uint256 balancerSwapFee = (((_amountEthToSwap * _balancerPortion) / totalPortions) * BALANCER_STABLE_POOL_FEE)/ 1000000;
+        uint256 uniswapSwapFee =
+            (((_amountToSwap * _uniswapPortion) / totalPortions) * UNISWAP_TERTIARY_POOL_FEE) / 1000000;
+        uint256 balancerSwapFee =
+            (((_amountToSwap * _balancerPortion) / totalPortions) * BALANCER_STABLE_POOL_FEE) / 1000000;
         return (uniswapSwapFee + balancerSwapFee);
     }
 
@@ -399,36 +393,30 @@ contract TtcVault is ITtcVault, Test {
      * @return amountOut The amount of tokens received from the swap.
      * @return feeTier The pool fee used for the swap.
      */
-    function executeUniswapSwap(
-        address _tokenIn,
-        address _tokenOut,
-        uint _amount
-    ) internal returns (uint256 amountOut, uint24 feeTier) {
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
-            .ExactInputSingleParams({
-                tokenIn: _tokenIn, // Token to swap
-                tokenOut: _tokenOut, // Token to receive
-                fee: UNISWAP_PRIMARY_POOL_FEE, // Initially set primary fee pool
-                recipient: address(this), // Send tokens to TTC vault
-                deadline: block.timestamp, // Swap must be performed in the current block. This should be passed in as a parameter to mitigate MEV exploits.
-                amountIn: _amount, // Amount of tokenIn to swap
-                amountOutMinimum: 0, // Receive whatever we can get for now (should set in production)
-                sqrtPriceLimitX96: 0 // Ignore for now (should set in production to reduce price impact)
-            });
+    function executeUniswapSwap(address _tokenIn, address _tokenOut, uint256 _amount)
+        internal
+        returns (uint256 amountOut, uint24 feeTier)
+    {
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+            tokenIn: _tokenIn, // Token to swap
+            tokenOut: _tokenOut, // Token to receive
+            fee: UNISWAP_PRIMARY_POOL_FEE, // Initially set primary fee pool
+            recipient: address(this), // Send tokens to TTC vault
+            deadline: block.timestamp, // Swap must be performed in the current block. This should be passed in as a parameter to mitigate MEV exploits.
+            amountIn: _amount, // Amount of tokenIn to swap
+            amountOutMinimum: 0, // Receive whatever we can get for now (should set in production)
+            sqrtPriceLimitX96: 0 // Ignore for now (should set in production to reduce price impact)
+        });
 
         // Try swap at primary, secondary, and tertiary fee tiers respectively.
         // Fee priority is 0.3% -> 1% -> 0.05% since we assume most high cap coins will have the best liquidity in the middle, then the highest, then the lowest fee tier.
         // Ideally, optimal routing would be computed off-chain and provided as a parameter to mint.
         // This is a placeholder to make minting functional for now.
-        try i_swapRouter.exactInputSingle(params) returns (
-            uint256 amountOutResult
-        ) {
+        try i_swapRouter.exactInputSingle(params) returns (uint256 amountOutResult) {
             return (amountOutResult, params.fee);
         } catch {
             params.fee = UNISWAP_SECONDARY_POOL_FEE;
-            try i_swapRouter.exactInputSingle(params) returns (
-                uint256 amountOutResult
-            ) {
+            try i_swapRouter.exactInputSingle(params) returns (uint256 amountOutResult) {
                 return (amountOutResult, params.fee);
             } catch {
                 params.fee = UNISWAP_TERTIARY_POOL_FEE;
