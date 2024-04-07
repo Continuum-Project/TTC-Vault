@@ -46,6 +46,13 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         address tokenAddress;
     }
 
+    // Route is a struct that represents a single swap route
+    struct Route {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+    }
+
     // Current tokens and their allocations in the vault
     Token[10] constituentTokens;
 
@@ -414,5 +421,23 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                 return (i_swapRouter.exactInputSingle(params), params.fee);
             }
         }
+    }
+
+    /**
+     * @notice Rebalances the vault's portfolio with a new set of tokens and their allocations.
+     * @param newWeights The new weights for the tokens in the vault.
+     * @param routes The routes for the swaps to be executed. Route[i] corresponds to the best route for rebalancing token[i]
+     */
+    function rebalance(uint8[10] newWeights, Route[10][] memory routes) public onlyTreasury {
+        require(validWeights(newWeights), "Invalid weights");
+        
+    }
+
+    function validWeights(uint8[10] memory newWeights) internal pure returns (bool) {
+        uint8 totalWeight;
+        for (uint8 i; i < 10; i++) {
+            totalWeight += newWeights[i];
+        }
+        return (totalWeight == 100);
     }
 }
