@@ -8,6 +8,7 @@ import "./TTC.sol";
 import "./interfaces/ITtcVault.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@rocketpool-router/contracts/RocketSwapRouter.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title TtcVault
@@ -17,7 +18,7 @@ import "@rocketpool-router/contracts/RocketSwapRouter.sol";
  * @notice The TtcVault allows for minting TTC tokens with ETH and redeeming TTC tokens for its constituent tokens
  * @notice The vault also undergoes periodic reconstitutions
  */
-contract TtcVault is ITtcVault {
+contract TtcVault is ITtcVault, ReentrancyGuard {
     // Treasury fee is only taken upon redemption
     // Treasury fee is denominated in BPS (basis points). 1 basis point = 0.01%
     // Fee is initally set to 0.1% of redemption amount.
@@ -54,15 +55,6 @@ contract TtcVault is ITtcVault {
     bool private locked;
 
     // Modifiers
-    modifier noReentrant() {
-        if (locked) {
-            revert NoReentrancy();
-        }
-        locked = true;
-        _;
-        locked = false;
-    }
-
     modifier onlyTreasury() {
         if (msg.sender != i_continuumTreasury) {
             revert OnlyTreasury();
@@ -115,7 +107,7 @@ contract TtcVault is ITtcVault {
      * @param _rocketSwapPortions amount of ETH to swap for rETH using uniswap and balancer are portions[0] and portions[1] respectively
      * @param _minREthAmountOut minimum amount of rETH received from rocket swap
      */
-    function mint(uint256[2] memory _rocketSwapPortions, uint256 _minREthAmountOut) public payable {
+    function mint(uint256[2] calldata _rocketSwapPortions, uint256 _minREthAmountOut) public payable {
         if (msg.value < 0.01 ether) {
             revert MinimumAmountToMint();
         }
@@ -197,9 +189,9 @@ contract TtcVault is ITtcVault {
      * @param _rocketSwapPortions amount of rETH to swap for ETH using uniswap and balancer are portions[0] and portions[1] respectively
      * @param _minEthAmountOut minimum amount of ETH received from rocket swap
      */
-    function redeem(uint256 _ttcAmount, uint256[2] memory _rocketSwapPortions, uint256 _minEthAmountOut)
+    function redeem(uint256 _ttcAmount, uint256[2] calldata _rocketSwapPortions, uint256 _minEthAmountOut)
         public
-        noReentrant
+        nonReentrant
     {
         uint256 totalSupplyTtc = i_ttcToken.totalSupply();
         // Check if vault is empty
@@ -256,7 +248,7 @@ contract TtcVault is ITtcVault {
      * @notice Reconstitutes the vault's portfolio with a new set of tokens.
      * @param _newTokens The new set of tokens and their allocations for the vault.
      */
-    function naiveReconstitution(Token[10] memory _newTokens) public onlyTreasury {
+    function naiveReconstitution(Token[10] calldata _newTokens) public onlyTreasury {
         if (!checkTokenList(_newTokens)) {
             revert InvalidTokenList();
         }
