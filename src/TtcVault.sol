@@ -428,9 +428,9 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @param newWeights The new weights for the tokens in the vault.
      * @param routes The routes for the swaps to be executed. Route[i] corresponds to the best route for rebalancing token[i]
      */
-    function rebalance(uint8[10] newWeights, Route[10][] memory routes) public onlyTreasury {
+    function rebalance(uint8[10] newWeights, Route[10][] calldata routes) public onlyTreasury {
         require(validWeights(newWeights), "Invalid weights");
-        
+
     }
 
     function validWeights(uint8[10] memory newWeights) internal pure returns (bool) {
