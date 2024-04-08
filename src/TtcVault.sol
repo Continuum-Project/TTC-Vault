@@ -9,6 +9,7 @@ import "./interfaces/ITtcVault.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@rocketpool-router/contracts/RocketSwapRouter.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 /**
  * @title TtcVault
@@ -39,6 +40,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     RocketSwapRouter public immutable i_rocketSwapRouter;
     IWETH public immutable i_wEthToken;
     IrETH public immutable i_rEthToken;
+    AggregatorV3Interface[10] internal priceFeeds;
+
 
     // Structure to represent a token and its allocation in the vault
     struct Token {
@@ -50,8 +53,13 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     struct Route {
         address tokenIn;
         address tokenOut;
-        uint24 fee;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        // uint24 fee; // TODO: consider using parameterized fee
     }
+
+    // Total amount of assets (in terms of ETH) managed by this contract
+    uint256 tvl = 0;
 
     // Current tokens and their allocations in the vault
     Token[10] constituentTokens;
@@ -82,6 +90,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         address _swapRouterAddress,
         address _wEthAddress,
         address _rocketSwapRouter,
+        address[10] priceFeedAddresses,
         Token[10] memory _initialTokens
     ) {
         i_ttcToken = new TTC();
@@ -90,6 +99,11 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         i_wEthToken = IWETH(_wEthAddress);
         i_rocketSwapRouter = RocketSwapRouter(payable(_rocketSwapRouter));
         i_rEthToken = i_rocketSwapRouter.rETH();
+
+        // set price feed oracles
+        for (uint8 i; i < 10; i++) {
+            priceFeeds[i] = AggregatorV3Interface(priceFeedAddresses[i]);
+        }
 
         if (!checkTokenList(_initialTokens)) {
             revert InvalidTokenList();
@@ -157,7 +171,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
             // Execute swap and return the tokens received and fee pool which swap executed in
             // tokensReceived is represented with the precision of the tokenOut's decimals
-            (uint256 tokensReceived, uint24 swapFee) = executeUniswapSwap(wEthAddress, token.tokenAddress, amountToSwap);
+            (uint256 tokensReceived, uint24 swapFee) = executeUniswapSwap(wEthAddress, token.tokenAddress, amountToSwap, 0);
             // Calculate the actual amount swapped after pool fee was deducted
             uint256 amountSwappedAfterFee = amountToSwap - ((amountToSwap * swapFee) / 1000000);
             ethMintAmountAfterFees += amountSwappedAfterFee;
@@ -185,6 +199,9 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             // If total supply of TTC is 0, mint 1 token. First mint sets initial price of TTC.
             amountToMint = 1 * (10 ** i_ttcToken.decimals());
         }
+
+        // set total value of assets in the vault equal to the aum
+        tvl = aum;
         // Mint TTC to the minter
         i_ttcToken.mint(msg.sender, amountToMint);
         emit Minted(msg.sender, msg.value, amountToMint);
@@ -266,7 +283,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             Token memory token = constituentTokens[i];
             uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
             IERC20(token.tokenAddress).approve(address(i_swapRouter), tokenBalance);
-            executeUniswapSwap(token.tokenAddress, wEthAddress, tokenBalance);
+            executeUniswapSwap(token.tokenAddress, wEthAddress, tokenBalance, 0);
         }
 
         // Get wETH balance of the vault
@@ -278,7 +295,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         for (uint8 i = 1; i < 10; i++) {
             Token memory token = _newTokens[i];
             uint256 amountToSwap = (wethBalance * token.weight) / 100;
-            executeUniswapSwap(wEthAddress, token.tokenAddress, amountToSwap);
+            executeUniswapSwap(wEthAddress, token.tokenAddress, amountToSwap, 0);
         }
     }
 
@@ -391,7 +408,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @return amountOut The amount of tokens received from the swap.
      * @return feeTier The pool fee used for the swap.
      */
-    function executeUniswapSwap(address _tokenIn, address _tokenOut, uint256 _amount)
+    function executeUniswapSwap(address _tokenIn, address _tokenOut, uint256 _amount, uint256 amountOutMinimum)
         internal
         returns (uint256 amountOut, uint24 feeTier)
     {
@@ -402,7 +419,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             recipient: address(this), // Send tokens to TTC vault
             deadline: block.timestamp, // Swap must be performed in the current block. This should be passed in as a parameter to mitigate MEV exploits.
             amountIn: _amount, // Amount of tokenIn to swap
-            amountOutMinimum: 0, // Receive whatever we can get for now (should set in production)
+            amountOutMinimum: amountOutMinimum, // Receive whatever we can get for now (should set in production)
             sqrtPriceLimitX96: 0 // Ignore for now (should set in production to reduce price impact)
         });
 
@@ -431,6 +448,42 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     function rebalance(uint8[10] newWeights, Route[10][] calldata routes) public onlyTreasury {
         require(validWeights(newWeights), "Invalid weights");
 
+        // deviations correspond to the difference between the expected new amount of each token and the actual amount
+        // not percentages, concrete values
+        uint256[10] deviations;
+        uint ethPrice = getLatestPriceOf(0);
+
+        for (uint8 i; i < 10; i++) {
+            if (routes[i].length == 0) {
+                // if route is not provided, it may mean that a token is not being rebalanced, or it may be rebalanced via a swap from different token
+                deviations[i] = 0;
+                continue;
+            }
+
+            uint256 preSwapTokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
+
+            // perform swap
+            for (uint8 j; j < routes[i].length; j++) {
+                Route calldata route = routes[i][j];
+                IERC20(token.tokenAddress).approve(address(i_swapRouter), preSwapTokenBalance);
+
+                // Execute swap. todo: do we need return values here?
+                (uint256 amountOut, uint24 feeTier) = executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
+            }
+
+            // update token weight
+            constituentTokens[i].weight = newWeights[i];
+
+            // calculate deviations
+            uint256 postSwapTokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
+            uint256 tokenPrice = getLatestPriceOf(i); // get price of token in USD
+
+            uint256 tokenValue = (postSwapTokenBalance * tokenPrice) / (10 ** ERC20(token.tokenAddress).decimals()); // get total value of token in USD in the contract
+            uint256 expectedTokenValue = (tvl * newWeights[i]) / 100; // get expected value of token in USD in the contract after rebalancing
+
+            // calculate deviation of actual token value from expected token value in ETH
+            deviations[i] = (expectedTokenValue - tokenValue) / ethPrice; 
+        }
     }
 
     function validWeights(uint8[10] memory newWeights) internal pure returns (bool) {
@@ -439,5 +492,23 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             totalWeight += newWeights[i];
         }
         return (totalWeight == 100);
+    }
+
+    /**
+     * @notice Get the latest price of a token from Chainlink
+     * @param constituentTokenIndex The index of the token in the constituentTokens array
+     * @return The latest price of the token at index constituentTokenIndex
+     */
+    function getLatestPriceOf(uint8 constituentTokenIndex) public view returns (uint) {
+        (
+            /* uint80 roundID */,
+            int price,
+            /*uint startedAt*/,
+            /*uint timeStamp*/,
+            /*uint80 answeredInRound*/
+        ) = priceFeeds[constituentTokenIndex].latestRoundData();
+            //price is in int, so we convert it to uint before returning
+            uint finalPrice = uint(price);
+            return finalPrice;
     }
 }
