@@ -486,7 +486,12 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         }
     }
 
-    function validWeights(uint8[10] memory newWeights) internal pure returns (bool) {
+    /**
+     * @notice Checks if the new weights for the tokens are valid.
+     * @param newWeights The new weights for the tokens in the vault.
+     * @return bool Returns true if the weights are valid, otherwise false.
+     */
+    function validWeights(uint8[10] calldata newWeights) internal pure returns (bool) {
         uint8 totalWeight;
         for (uint8 i; i < 10; i++) {
             totalWeight += newWeights[i];
