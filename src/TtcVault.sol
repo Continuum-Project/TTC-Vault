@@ -262,7 +262,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             if (!IERC20(token.tokenAddress).transfer(i_continuumTreasury, fee)) {
                 revert TreasuryTransferFailed();
             }
-            
+
             // Update the total value of assets in the vault
             contractAUM -= amountToTransfer;
         }
@@ -517,6 +517,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @notice Checks if the new weights for the tokens are valid.
      * @param newWeights The new weights for the tokens in the vault.
      * @return bool Returns true if the weights are valid, otherwise false.
+     * TODO: too similar to checkTokenList, consider merging
      */
     function validWeights(uint8[10] calldata newWeights) internal pure returns (bool) {
         uint8 totalWeight;
