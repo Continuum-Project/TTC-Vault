@@ -4,6 +4,10 @@ pragma solidity 0.8.20;
 
 // TTC token contract
 import "./TTC.sol";
+
+// Types
+import {Route} from "./types/Route.sol";
+
 // Interfaces
 import "./interfaces/ITtcVault.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
@@ -49,17 +53,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         address tokenAddress;
     }
 
-    // Route is a struct that represents a single swap route
-    struct Route {
-        address tokenIn;
-        address tokenOut;
-        uint256 amountIn;
-        uint256 amountOutMinimum;
-        // uint24 fee; // TODO: consider using parameterized fee
-    }
-
     // Total amount of assets (in terms of ETH) managed by this contract
-    uint256 tvl = 0;
+    uint256 contractAUM = 0;
 
     // Current tokens and their allocations in the vault
     Token[10] constituentTokens;
@@ -201,7 +196,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         }
 
         // set total value of assets in the vault equal to the aum
-        tvl = aum;
+        contractAUM = aum;
         // Mint TTC to the minter
         i_ttcToken.mint(msg.sender, amountToMint);
         emit Minted(msg.sender, msg.value, amountToMint);
@@ -445,22 +440,17 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @param newWeights The new weights for the tokens in the vault.
      * @param routes The routes for the swaps to be executed. Route[i] corresponds to the best route for rebalancing token[i]
      */
-    function rebalance(uint8[10] calldata newWeights, Route[10][] calldata routes) public onlyTreasury {
+    function rebalance(uint8[10] calldata newWeights, Route[10][] calldata routes) public onlyTreasury nonReentrant {
         require(validWeights(newWeights), "Invalid weights");
 
         // deviations correspond to the difference between the expected new amount of each token and the actual amount
         // not percentages, concrete values
-        uint256[10] memory deviations;
-        uint ethPrice = getLatestPriceOf(0);
+        int256[10] memory deviations;
+        // uint ethPrice = getLatestPriceOf(0);
 
+        // perform swaps 
         for (uint8 i; i < 10; i++) {
             Token memory token = constituentTokens[i];
-            if (routes[i].length == 0) {
-                // if route is not provided, it may mean that a token is not being rebalanced, or it may be rebalanced via a swap from different token
-                deviations[i] = 0;
-                continue;
-            }
-
             uint256 preSwapTokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
 
             // perform swap
@@ -469,21 +459,48 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                 IERC20(token.tokenAddress).approve(address(i_swapRouter), preSwapTokenBalance);
 
                 // Execute swap. todo: do we need return values here?
-                (uint256 amountOut, uint24 feeTier) = executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
+                (uint256 amountSwapped, uint24 feeTier) = executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
             }
 
             // update token weight
             constituentTokens[i].weight = newWeights[i];
+        }
 
+        uint256 ethPrice = getLatestPriceInEthOf(0);
+        uint256 aumInEth = contractAUM * ethPrice / 1e18;
+
+        // find deviations
+        for (uint8 i; i < 10; i++) {
             // calculate deviations
-            uint256 postSwapTokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
-            uint256 tokenPrice = getLatestPriceOf(i); // get price of token in USD
+            Token memory token = constituentTokens[i];
 
-            uint256 tokenValue = (postSwapTokenBalance * tokenPrice) / (10 ** ERC20(token.tokenAddress).decimals()); // get total value of token in USD in the contract
-            uint256 expectedTokenValue = (tvl * newWeights[i]) / 100; // get expected value of token in USD in the contract after rebalancing
+            uint256 postSwapTokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
+            uint256 tokenPrice = getLatestPriceInEthOf(i); // get price of token in ETH
+
+            uint256 tokenValueInEth = (postSwapTokenBalance * tokenPrice) / (10 ** ERC20(token.tokenAddress).decimals()); // get total value of token in ETH in the contract
+            uint256 expectedTokenValueInEth = (aumInEth * newWeights[i]) / 100; // get expected value of token in ETH in the contract after rebalancing
 
             // calculate deviation of actual token value from expected token value in ETH
-            deviations[i] = (expectedTokenValue - tokenValue) / ethPrice; 
+            deviations[i] = int256(expectedTokenValueInEth) - int256(tokenValueInEth);
+        }
+
+        // TODO: consider checking the fraction of deviations, so we can abort if they are too big
+
+        // correct deviations
+        for (uint8 i; i < 10; i++) {
+            Token memory token = constituentTokens[i];
+            int256 deviation = deviations[i];
+            if (deviation > 0) {
+                uint256 uDeviation = uint256(deviation);
+                // swap token for ETH
+                IERC20(token.tokenAddress).approve(address(i_swapRouter), uDeviation);
+                executeUniswapSwap(token.tokenAddress, address(i_wEthToken), uDeviation, 0);
+            } else if (deviation < 0) {
+                // swap ETH for token
+                uint256 ethAmount = uint256(-deviation);
+                IWETH(address(i_wEthToken)).approve(address(i_swapRouter), ethAmount);
+                executeUniswapSwap(address(i_wEthToken), token.tokenAddress, ethAmount, 0);
+            }
         }
     }
 
@@ -505,7 +522,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @param constituentTokenIndex The index of the token in the constituentTokens array
      * @return The latest price of the token at index constituentTokenIndex
      */
-    function getLatestPriceOf(uint8 constituentTokenIndex) public view returns (uint) {
+    function getLatestPriceInEthOf(uint8 constituentTokenIndex) public view returns (uint) {
         (
             /* uint80 roundID */,
             int price,
