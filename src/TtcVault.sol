@@ -9,7 +9,7 @@ import "./interfaces/ITtcVault.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@rocketpool-router/contracts/RocketSwapRouter.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 /**
  * @title TtcVault
@@ -90,7 +90,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         address _swapRouterAddress,
         address _wEthAddress,
         address _rocketSwapRouter,
-        address[10] priceFeedAddresses,
+        address[10] memory priceFeedAddresses,
         Token[10] memory _initialTokens
     ) {
         i_ttcToken = new TTC();
@@ -445,15 +445,16 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @param newWeights The new weights for the tokens in the vault.
      * @param routes The routes for the swaps to be executed. Route[i] corresponds to the best route for rebalancing token[i]
      */
-    function rebalance(uint8[10] newWeights, Route[10][] calldata routes) public onlyTreasury {
+    function rebalance(uint8[10] calldata newWeights, Route[10][] calldata routes) public onlyTreasury {
         require(validWeights(newWeights), "Invalid weights");
 
         // deviations correspond to the difference between the expected new amount of each token and the actual amount
         // not percentages, concrete values
-        uint256[10] deviations;
+        uint256[10] memory deviations;
         uint ethPrice = getLatestPriceOf(0);
 
         for (uint8 i; i < 10; i++) {
+            Token memory token = constituentTokens[i];
             if (routes[i].length == 0) {
                 // if route is not provided, it may mean that a token is not being rebalanced, or it may be rebalanced via a swap from different token
                 deviations[i] = 0;
