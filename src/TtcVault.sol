@@ -235,11 +235,17 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         uint256 initialEthBalance = address(this).balance;
         executeRocketSwapFrom(rEthRedemptionAmount, _rocketSwapPortions[0], _rocketSwapPortions[1], _minEthAmountOut);
         uint256 resultingEthBalance = address(this).balance;
-        uint256 rEthProfit = (resultingEthBalance - initialEthBalance) - ethAllocationAmountPostSwap;
+
+        uint256 ethChange = resultingEthBalance - initialEthBalance;
+
+        uint256 rEthProfit = ethChange - ethAllocationAmountPostSwap;
         uint256 fee = ((ethAllocationAmountPostSwap * TREASURY_REDEMPTION_FEE) / 10000);
         payable(msg.sender).transfer(ethAllocationAmountPostSwap - fee);
         i_continuumTreasury.transfer(fee + rEthProfit);
-        ethAllocationREth -= (resultingEthBalance - initialEthBalance);
+        ethAllocationREth -= ethChange;
+
+        // remove the redeemed amount from the total supply
+        contractAUM -= ethChange;
 
         for (uint8 i = 1; i < 10; i++) {
             Token memory token = constituentTokens[i];
@@ -256,6 +262,9 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             if (!IERC20(token.tokenAddress).transfer(i_continuumTreasury, fee)) {
                 revert TreasuryTransferFailed();
             }
+            
+            // Update the total value of assets in the vault
+            contractAUM -= amountToTransfer;
         }
 
         // Burn the TTC redeemed
