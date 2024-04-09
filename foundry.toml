@@ -11,7 +11,8 @@ remappings = [
     "@uniswap/v3-periphery/=lib/v3-periphery/",
     "@uniswap/v3-core/=lib/v3-core/",
     "@rocketpool/contracts/=lib/rocketpool/contracts/",
-    "@rocketpool-router/contracts/=lib/rocketpool-router/contracts/"
+    "@rocketpool-router/contracts/=lib/rocketpool-router/contracts/",
+    "@chainlink/=lib/chainlink/"
 ]
 gas_reports = ["*"]
 
