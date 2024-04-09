@@ -455,7 +455,6 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         // deviations correspond to the difference between the expected new amount of each token and the actual amount
         // not percentages, concrete values
         int256[10] memory deviations;
-        // uint ethPrice = getLatestPriceOf(0);
 
         // perform swaps 
         for (uint8 i; i < 10; i++) {
