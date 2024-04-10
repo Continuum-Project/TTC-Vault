@@ -7,6 +7,7 @@ import "./TTC.sol";
 
 // Types
 import {Route} from "./types/Route.sol";
+import {IUniswapV3PoolDerivedState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolDerivedState.sol";
 
 // Interfaces
 import "./interfaces/ITtcVault.sol";
@@ -14,7 +15,7 @@ import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@rocketpool-router/contracts/RocketSwapRouter.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
-import "@uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
+import "@uniswap/v4-periphery/contracts/libraries/Oracle.sol";
 
 /**
  * @title TtcVault
@@ -475,7 +476,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             constituentTokens[i].weight = newWeights[i];
         }
 
-        uint256 ethPrice = getLatestPriceInEthOf(0);
+        uint256 ethPrice = getLatestPriceInEthOf(0, 0); // TODO set seconds ago differently
         uint256 aumInEth = contractAUM * ethPrice / 1e18;
 
         // find deviations
@@ -484,7 +485,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             Token memory token = constituentTokens[i];
 
             uint256 postSwapTokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
-            uint256 tokenPrice = getLatestPriceInEthOf(i); // get price of token in ETH
+            uint256 tokenPrice = getLatestPriceInEthOf(i, 0); // get price of token in ETH
 
             uint256 tokenValueInEth = (postSwapTokenBalance * tokenPrice) / (10 ** ERC20(token.tokenAddress).decimals()); // get total value of token in ETH in the contract
             uint256 expectedTokenValueInEth = (aumInEth * newWeights[i]) / 100; // get expected value of token in ETH in the contract after rebalancing
@@ -529,20 +530,36 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
     /**
      * @notice Get the latest price of a token
+     * @dev https://docs.uniswap.org/concepts/protocol/oracle
      * @param constituentTokenIndex The index of the token in the constituentTokens array
      * @param secondsAgo The number of seconds ago to use for TWAP calculation
      * @return The latest price of one token of the one at index constituentTokenIndex in terms of ETH
      */
     function getLatestPriceInEthOf(uint8 constituentTokenIndex, uint32 secondsAgo) public view returns (uint) {
-        address calldata tokenAddress = constituentTokens[constituentTokenIndex].tokenAddress;
-        address calldata wEthAddress = address(i_wEthToken);
+        address tokenAddress = constituentTokens[constituentTokenIndex].tokenAddress;
+        address wEthAddress = address(i_wEthToken);
 
         address pool = IUniswapV3Factory(i_uniswapFactory)
             .getPool(tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
         
         require(pool != address(0), "Pool does not exist");
 
-        (uint24 tick, ) = OracleLibrary.consult(pool, secondsAgo);
-        return OracleLibrary.getQuoteAtTick(tick, 1, tokenAddress, wEthAddress);
+        IUniswapV3PoolDerivedState IPool = IUniswapV3PoolDerivedState(pool);
+
+        // initialize array for TWAP computation
+        uint32[] memory secondsAgos = new uint32[](2);
+        secondsAgos[0] = 0;
+        secondsAgos[1] = secondsAgo;
+
+        (int56[] memory tickCumulatives, ) = IPool.observe(secondsAgos);
+        
+        // get the price of the token in terms of ETH
+        int56 tickDiff = tickCumulatives[0] - tickCumulatives[1];
+        int56 avgTick = tickDiff / int56(int32(secondsAgo));
+
+        int256 price = tickDiff / avgTick;
+        require(price > 0, "Price is 0 or negative");
+
+        return uint256(price);
     }
 }
