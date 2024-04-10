@@ -29,8 +29,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     uint24 public constant UNISWAP_TERTIARY_POOL_FEE = 5e2;
     // Balancer rETH/wETH swap fee is 0.04%
     uint24 public constant BALANCER_STABLE_POOL_FEE = 4e2;
-    // Max slippage allowed for rocket swap
-    uint24 public constant MAX_ROCKET_SWAP_SLIPPAGE = 3e1;
+    // Max price impact allowed for rocket swap
+    uint24 public constant MAX_ROCKET_SWAP_PRICE_IMPACT = 3e1;
 
     // Immutable globals
     TTC public immutable i_ttcToken;
@@ -105,9 +105,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @notice Mints TTC tokens in exchange for ETH sent to the contract.
      * @notice The amount of TTC minted is based on the amount of ETH sent, the pre-mint valuation of the vault's assets in ETH, and the pre-mint total supply of TTC.
      * @param _rocketSwapPortions amount of ETH to swap for rETH using uniswap and balancer are portions[0] and portions[1] respectively
-     * @param _minREthAmountOut minimum amount of rETH received from rocket swap
      */
-    function mint(uint256[2] calldata _rocketSwapPortions, uint256 _minREthAmountOut) public payable {
+    function mint(uint256[2] calldata _rocketSwapPortions) public payable {
         if (msg.value < 0.01 ether) {
             revert MinimumAmountToMint();
         }
@@ -118,16 +117,11 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
         // Get amount of ETH to swap for rETH
         uint256 ethAmountForREth = (msg.value * constituentTokens[0].weight) / 100;
-        // Check that _minREthAmount doesn't differ from the expected amount of rETH from rocket pool by more than 0.3% (this value can eventually be set by governance)
-        if (
-            _minREthAmountOut
-                < (i_rEthToken.getRethValue(ethAmountForREth) * (10000 - MAX_ROCKET_SWAP_SLIPPAGE)) / 10000
-        ) {
-            revert RocketSwapMaxSlippageExceeded();
-        }
+        uint256 ethValueInREth = i_rEthToken.getRethValue(ethAmountForREth);
+        uint256 minREthAmountOut = ethValueInREth - (ethValueInREth * (10000 - MAX_ROCKET_SWAP_PRICE_IMPACT)) / 10000;
         // Execute the rocket swap
         uint256 initialREthBalance = i_rEthToken.balanceOf(address(this));
-        executeRocketSwapTo(ethAmountForREth, _rocketSwapPortions[0], _rocketSwapPortions[1], _minREthAmountOut);
+        executeRocketSwapTo(ethAmountForREth, _rocketSwapPortions[0], _rocketSwapPortions[1], minREthAmountOut);
         uint256 resultingREthBalance = i_rEthToken.balanceOf(address(this));
         // Get the pre-swap value of rETH (in ETH) in the vault based on the swap price
         aum += ((initialREthBalance * ethAmountForREth) / (resultingREthBalance - initialREthBalance));
@@ -187,12 +181,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @notice Redeems TTC tokens for a proportional share of the vault's assets.
      * @param _ttcAmount The amount of TTC tokens to redeem.
      * @param _rocketSwapPortions amount of rETH to swap for ETH using uniswap and balancer are portions[0] and portions[1] respectively
-     * @param _minEthAmountOut minimum amount of ETH received from rocket swap
      */
-    function redeem(uint256 _ttcAmount, uint256[2] calldata _rocketSwapPortions, uint256 _minEthAmountOut)
-        public
-        nonReentrant
-    {
+    function redeem(uint256 _ttcAmount, uint256[2] calldata _rocketSwapPortions) public nonReentrant {
         uint256 totalSupplyTtc = i_ttcToken.totalSupply();
         // Check if vault is empty
         if (totalSupplyTtc == 0) {
@@ -205,16 +195,12 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
         // Handle rETH redemption and keep profit to fund reconstitution
         uint256 rEthRedemptionAmount = (i_rEthToken.balanceOf(address(this)) * _ttcAmount) / totalSupplyTtc;
-        if (
-            _minEthAmountOut
-                < (i_rEthToken.getRethValue(rEthRedemptionAmount) * (10000 - MAX_ROCKET_SWAP_SLIPPAGE)) / 10000
-        ) {
-            revert RocketSwapMaxSlippageExceeded();
-        }
+        uint256 rEthValueInEth = i_rEthToken.getEthValue(rEthRedemptionAmount);
+        uint256 minAmountOut = rEthValueInEth - (rEthValueInEth * (10000 - MAX_ROCKET_SWAP_PRICE_IMPACT)) / 10000;
         uint256 ethAllocationAmountPostSwap = ((ethAllocationREth * _ttcAmount) / totalSupplyTtc)
             - calculateRocketSwapFee(rEthRedemptionAmount, _rocketSwapPortions[0], _rocketSwapPortions[1]);
         uint256 initialEthBalance = address(this).balance;
-        executeRocketSwapFrom(rEthRedemptionAmount, _rocketSwapPortions[0], _rocketSwapPortions[1], _minEthAmountOut);
+        executeRocketSwapFrom(rEthRedemptionAmount, _rocketSwapPortions[0], _rocketSwapPortions[1], minAmountOut);
         uint256 resultingEthBalance = address(this).balance;
         uint256 rEthProfit = (resultingEthBalance - initialEthBalance) - ethAllocationAmountPostSwap;
         uint256 fee = ((ethAllocationAmountPostSwap * TREASURY_REDEMPTION_FEE) / 10000);

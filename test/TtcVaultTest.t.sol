@@ -49,10 +49,10 @@ contract VaultTest is TtcTestContext {
 
         vm.startPrank(user);
         uint256 amountEthToREth = (weiAmount * tokens[0].weight) / 100;
-        (uint[2] memory portions, uint amountOut) = calculateOptimalREthRoute(
+        (uint[2] memory portions, ) = calculateOptimalREthRoute(
             amountEthToREth
         );
-        vault.mint{value: weiAmount}(portions, amountOut);
+        vault.mint{value: weiAmount}(portions);
         vm.stopPrank();
 
        
@@ -80,10 +80,10 @@ contract VaultTest is TtcTestContext {
         vm.startPrank(user);
         uint256 ttcBalance = (vault.i_ttcToken()).balanceOf(user);
         uint256 amountREthToEth = ((vault.i_rEthToken()).balanceOf(address(vault)) * ttcBalance) / (vault.i_ttcToken()).totalSupply();
-        (uint[2] memory portions, uint amountOut) = calculateOptimalEthRoute(
+        (uint[2] memory portions,) = calculateOptimalEthRoute(
             amountREthToEth
         );
-        vault.redeem(ttcBalance, portions, amountOut);
+        vault.redeem(ttcBalance, portions);
         vm.stopPrank();
 
         assertEq(
@@ -118,10 +118,10 @@ contract VaultTest is TtcTestContext {
       
         vm.startPrank(user);
         uint256 amountEthToREth = (weiAmount * tokens[0].weight) / 100;
-        (uint[2] memory portions, uint amountOut) = calculateOptimalREthRoute(
+        (uint[2] memory portions,) = calculateOptimalREthRoute(
             amountEthToREth
         );
-        vault.mint{value: weiAmount}(portions, amountOut);
+        vault.mint{value: weiAmount}(portions);
 
         assertEq(
             IERC20(vault.getTtcTokenAddress()).balanceOf(user),
@@ -141,8 +141,8 @@ contract VaultTest is TtcTestContext {
         weiAmount = 5 ether;
         vm.deal(user, weiAmount);
         amountEthToREth = (weiAmount * tokens[0].weight) / 100;
-        (portions, amountOut) = calculateOptimalREthRoute(amountEthToREth);
-        vault.mint{value: weiAmount}(portions, amountOut);
+        (portions,) = calculateOptimalREthRoute(amountEthToREth);
+        vault.mint{value: weiAmount}(portions);
         vm.stopPrank();
 
         assertGt(
