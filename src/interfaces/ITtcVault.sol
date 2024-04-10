@@ -15,6 +15,9 @@ interface ITtcVault {
     error NoReentrancy();
     error OnlyTreasury();
     error RocketSwapMaxSlippageExceeded();
+    error InvalidWeights();
+    error PoolDoesNotExist();
+    error NegativePrice();
 
     // Events
     /// @notice event for minting

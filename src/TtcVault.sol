@@ -447,7 +447,9 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @param routes The routes for the swaps to be executed. Route[i] corresponds to the best route for rebalancing token[i]
      */
     function rebalance(uint8[10] calldata newWeights, Route[10][] calldata routes) public onlyTreasury nonReentrant {
-        require(validWeights(newWeights), "Invalid weights");
+        if (!validWeights(newWeights)) {
+            revert InvalidWeights();
+        }
 
         // deviations correspond to the difference between the expected new amount of each token and the actual amount
         // not percentages, concrete values
@@ -538,7 +540,9 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         address pool = IUniswapV3Factory(i_uniswapFactory)
             .getPool(tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
         
-        require(pool != address(0), "Pool does not exist");
+        if (pool == address(0)) {
+            revert PoolDoesNotExist();
+        }
 
         IUniswapV3PoolDerivedState IPool = IUniswapV3PoolDerivedState(pool);
 
@@ -554,7 +558,9 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         int56 avgTick = tickDiff / int56(int32(secondsAgo));
 
         int256 price = tickDiff / avgTick;
-        require(price > 0, "Price is 0 or negative");
+        if (price <= 0) {
+            revert NegativePrice();
+        }
 
         return uint256(price);
     }
