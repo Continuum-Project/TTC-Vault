@@ -6,7 +6,7 @@ pragma solidity 0.8.20;
 import "./TTC.sol";
 
 // Types
-import {Route, Token} from "./types/Route.sol";
+import {Route, Token} from "./types/types.sol";
 import {IUniswapV3PoolDerivedState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolDerivedState.sol";
 
 // Interfaces

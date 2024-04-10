@@ -2,7 +2,7 @@
 
 pragma solidity 0.8.20;
 
-import {Route} from "../types/Route.sol";
+import {Route} from "../types/types.sol";
 
 interface ITtcVault {
     // Errors
