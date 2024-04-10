@@ -540,14 +540,14 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             revert PoolDoesNotExist();
         }
 
-        IUniswapV3PoolDerivedState IPool = IUniswapV3PoolDerivedState(pool);
+        IUniswapV3PoolDerivedState _pool = IUniswapV3PoolDerivedState(pool);
 
         // initialize array for TWAP computation
         uint32[] memory secondsAgos = new uint32[](2);
         secondsAgos[0] = 0;
         secondsAgos[1] = secondsAgo;
 
-        (int56[] memory tickCumulatives, ) = IPool.observe(secondsAgos);
+        (int56[] memory tickCumulatives, ) = _pool.observe(secondsAgos);
         
         // get the price of the token in terms of ETH
         int56 tickDiff = tickCumulatives[0] - tickCumulatives[1];
