@@ -464,14 +464,15 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                 IERC20(token.tokenAddress).approve(address(i_swapRouter), preSwapTokenBalance);
 
                 // Execute swap. todo: do we need return values here?
-                (uint256 amountSwapped, uint24 feeTier) = executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
+                // (uint256 amountSwapped, uint24 feeTier) = executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
+                executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
             }
 
             // update token weight
             constituentTokens[i].weight = newWeights[i];
         }
 
-        uint256 ethPrice = getLatestPriceInEthOf(0, 0); // TODO set seconds ago differently
+        uint256 ethPrice = getLatestPriceInEthOf(0, 10); // TODO set seconds ago differently
         uint256 aumInEth = contractAUM * ethPrice / 1e18;
 
         // find deviations
@@ -480,7 +481,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             Token memory token = constituentTokens[i];
 
             uint256 postSwapTokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
-            uint256 tokenPrice = getLatestPriceInEthOf(i, 0); // get price of token in ETH
+            uint256 tokenPrice = getLatestPriceInEthOf(i, 10); // get price of token in ETH
 
             uint256 tokenValueInEth = (postSwapTokenBalance * tokenPrice) / (10 ** ERC20(token.tokenAddress).decimals()); // get total value of token in ETH in the contract
             uint256 expectedTokenValueInEth = (aumInEth * newWeights[i]) / 100; // get expected value of token in ETH in the contract after rebalancing
