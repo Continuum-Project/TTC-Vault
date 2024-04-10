@@ -30,7 +30,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     // Balancer rETH/wETH swap fee is 0.04%
     uint24 public constant BALANCER_STABLE_POOL_FEE = 4e2;
     // Max price impact allowed for rocket swap
-    uint24 public constant MAX_ROCKET_SWAP_PRICE_IMPACT = 3e1;
+    uint24 public constant MAX_ROCKET_SWAP_PRICE_IMPACT = 1e1;
 
     // Immutable globals
     TTC public immutable i_ttcToken;
