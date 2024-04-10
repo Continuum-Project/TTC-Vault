@@ -510,6 +510,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                 executeUniswapSwap(address(i_wEthToken), token.tokenAddress, ethAmount, 0);
             }
         }
+
+        emit Rebalanced(newWeights);
     }
 
     /**
