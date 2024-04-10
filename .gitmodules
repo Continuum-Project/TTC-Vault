@@ -25,6 +25,3 @@
 [submodule "lib/rocketpool-router"]
 	path = lib/rocketpool-router
 	url = https://github.com/rocket-pool/rocketpool-router
-[submodule "lib/chainlink"]
-	path = lib/chainlink
-	url = https://github.com/smartcontractkit/chainlink

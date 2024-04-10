@@ -13,7 +13,8 @@ import "./interfaces/ITtcVault.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@rocketpool-router/contracts/RocketSwapRouter.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
+import "@uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
 
 /**
  * @title TtcVault
@@ -40,11 +41,12 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     // Immutable globals
     TTC public immutable i_ttcToken;
     address payable public immutable i_continuumTreasury;
+    address public immutable i_uniswapFactory;
     ISwapRouter public immutable i_swapRouter;
     RocketSwapRouter public immutable i_rocketSwapRouter;
     IWETH public immutable i_wEthToken;
     IrETH public immutable i_rEthToken;
-    AggregatorV3Interface[10] internal priceFeeds;
+
 
 
     // Structure to represent a token and its allocation in the vault
@@ -85,7 +87,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         address _swapRouterAddress,
         address _wEthAddress,
         address _rocketSwapRouter,
-        address[10] memory priceFeedAddresses,
+        address _uniswapFactoryAddress,
         Token[10] memory _initialTokens
     ) {
         i_ttcToken = new TTC();
@@ -94,11 +96,12 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         i_wEthToken = IWETH(_wEthAddress);
         i_rocketSwapRouter = RocketSwapRouter(payable(_rocketSwapRouter));
         i_rEthToken = i_rocketSwapRouter.rETH();
+        i_uniswapFactory = _uniswapFactoryAddress;
 
         // set price feed oracles
-        for (uint8 i; i < 10; i++) {
-            priceFeeds[i] = AggregatorV3Interface(priceFeedAddresses[i]);
-        }
+        // for (uint8 i; i < 10; i++) {
+        //     priceFeeds[i] = AggregatorV3Interface(priceFeedAddresses[i]);
+        // }
 
         if (!checkTokenList(_initialTokens)) {
             revert InvalidTokenList();
@@ -527,20 +530,15 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     }
 
     /**
-     * @notice Get the latest price of a token from Chainlink
+     * @notice Get the latest price of a token
      * @param constituentTokenIndex The index of the token in the constituentTokens array
      * @return The latest price of the token at index constituentTokenIndex
      */
     function getLatestPriceInEthOf(uint8 constituentTokenIndex) public view returns (uint) {
-        (
-            /* uint80 roundID */,
-            int price,
-            /*uint startedAt*/,
-            /*uint timeStamp*/,
-            /*uint80 answeredInRound*/
-        ) = priceFeeds[constituentTokenIndex].latestRoundData();
-            //price is in int, so we convert it to uint before returning
-            uint finalPrice = uint(price);
-            return finalPrice;
+        address calldata tokenAddress = constituentTokens[constituentTokenIndex].tokenAddress;
+        address calldata wEthAddress = address(i_wEthToken);
+
+        address pool = IUniswapV3Factory(i_uniswapFactory)
+            .getPool(tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
     }
 }
