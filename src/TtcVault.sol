@@ -532,13 +532,19 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     /**
      * @notice Get the latest price of a token
      * @param constituentTokenIndex The index of the token in the constituentTokens array
-     * @return The latest price of the token at index constituentTokenIndex
+     * @param secondsAgo The number of seconds ago to use for TWAP calculation
+     * @return The latest price of one token of the one at index constituentTokenIndex in terms of ETH
      */
-    function getLatestPriceInEthOf(uint8 constituentTokenIndex) public view returns (uint) {
+    function getLatestPriceInEthOf(uint8 constituentTokenIndex, uint32 secondsAgo) public view returns (uint) {
         address calldata tokenAddress = constituentTokens[constituentTokenIndex].tokenAddress;
         address calldata wEthAddress = address(i_wEthToken);
 
         address pool = IUniswapV3Factory(i_uniswapFactory)
             .getPool(tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
+        
+        require(pool != address(0), "Pool does not exist");
+
+        (uint24 tick, ) = OracleLibrary.consult(pool, secondsAgo);
+        return OracleLibrary.getQuoteAtTick(tick, 1, tokenAddress, wEthAddress);
     }
 }
