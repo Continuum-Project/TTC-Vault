@@ -451,6 +451,10 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
         // perform swaps 
         for (uint8 i; i < 10; i++) {
+            // if the weight is the same, no need to swap
+            if (newWeights[i] == constituentTokens[i].weight) {
+                continue;
+            }
             Token memory token = constituentTokens[i];
             uint256 preSwapTokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
 
