@@ -440,7 +440,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @param newWeights The new weights for the tokens in the vault.
      * @param routes The routes for the swaps to be executed. Route[i] corresponds to the best route for rebalancing token[i]
      */
-    function rebalance(uint8[10] calldata newWeights, Route[10][] calldata routes) public onlyTreasury nonReentrant {
+    function rebalance(uint8[10] calldata newWeights, Route[10][] calldata routes) public payable onlyTreasury nonReentrant {
         if (!validWeights(newWeights)) {
             revert InvalidWeights();
         }

@@ -37,5 +37,5 @@ interface ITtcVault {
     function redeem(uint256 _ttcAmount, uint256[2] memory _rocketSwapPortions, uint256 _minEthAmountOut) external;
 
     /// @notice Rebalance the vault
-    function rebalance(uint8[10] memory _newWeights, Route[10][] calldata routes) external;
+    function rebalance(uint8[10] memory _newWeights, Route[10][] calldata routes) external payable;
 }
