@@ -21,6 +21,8 @@ contract TtcTestContext is Test {
         address(0xae78736Cd615f374D3085123A210448E74Fc6393);
     address constant ROCKET_SWAP_ROUTER_ADDRESS =
         address(0x16D5A408e807db8eF7c578279BEeEe6b228f1c1C);
+    address constant UNISWAP_FACTORY_ADDRESS =
+        address(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
 
     TtcVault public vault;
     TtcVault.Token[10] public tokens;

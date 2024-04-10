@@ -23,6 +23,7 @@ contract VaultTest is TtcTestContext {
             UNISWAP_SWAP_ROUTER_ADDRESS,
             WETH_ADDRESS,
             ROCKET_SWAP_ROUTER_ADDRESS,
+            UNISWAP_FACTORY_ADDRESS,
             tokens
         );
     }
