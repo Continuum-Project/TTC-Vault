@@ -97,11 +97,6 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         i_rEthToken = i_rocketSwapRouter.rETH();
         i_uniswapFactory = _uniswapFactoryAddress;
 
-        // set price feed oracles
-        // for (uint8 i; i < 10; i++) {
-        //     priceFeeds[i] = AggregatorV3Interface(priceFeedAddresses[i]);
-        // }
-
         if (!checkTokenList(_initialTokens)) {
             revert InvalidTokenList();
         }
