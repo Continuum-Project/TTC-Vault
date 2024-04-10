@@ -6,7 +6,7 @@ pragma solidity 0.8.20;
 import "./TTC.sol";
 
 // Types
-import {Route} from "./types/Route.sol";
+import {Route, Token} from "./types/Route.sol";
 import {IUniswapV3PoolDerivedState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolDerivedState.sol";
 
 // Interfaces
@@ -47,12 +47,6 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     RocketSwapRouter public immutable i_rocketSwapRouter;
     IWETH public immutable i_wEthToken;
     IrETH public immutable i_rEthToken;
-
-    // Structure to represent a token and its allocation in the vault
-    struct Token {
-        uint8 weight;
-        address tokenAddress;
-    }
 
     // Total amount of assets (in terms of ETH) managed by this contract
     uint256 contractAUM = 0;

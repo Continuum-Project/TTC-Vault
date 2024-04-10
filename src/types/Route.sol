@@ -9,3 +9,9 @@ struct Route {
     uint256 amountOutMinimum;
     // uint24 fee; // TODO: consider using parameterized fee
 }
+
+// Structure to represent a token and its allocation in the vault
+struct Token {
+    uint8 weight;
+    address tokenAddress;
+}
