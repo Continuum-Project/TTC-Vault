@@ -47,8 +47,6 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     IWETH public immutable i_wEthToken;
     IrETH public immutable i_rEthToken;
 
-
-
     // Structure to represent a token and its allocation in the vault
     struct Token {
         uint8 weight;
