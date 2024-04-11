@@ -14,7 +14,6 @@ import "./interfaces/ITtcVault.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@rocketpool-router/contracts/RocketSwapRouter.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 import "@uniswap/v4-periphery/contracts/libraries/Oracle.sol";
 
 /**
@@ -49,9 +48,9 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     IrETH public immutable i_rEthToken;
 
     // Total amount of assets (in terms of ETH) managed by this contract
-    uint256 contractAUM = 0;
+    uint256 public contractAUM = 0;
 
-    // Current tokens and their allocations in the vault
+    // Current tokens and their alloGcations in the vault
     Token[10] constituentTokens;
 
     // Amount of ETH allocated into rEth so far (after swap fees)
@@ -182,6 +181,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
         // set total value of assets in the vault equal to the aum
         contractAUM = aum;
+
         // Mint TTC to the minter
         i_ttcToken.mint(msg.sender, amountToMint);
         emit Minted(msg.sender, msg.value, amountToMint);
@@ -222,7 +222,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         ethAllocationREth -= ethChange;
 
         // remove the redeemed amount from the total supply
-        contractAUM -= ethChange;
+        contractAUM -= ethAllocationAmountPostSwap + fee;
 
         for (uint8 i = 1; i < 10; i++) {
             Token memory token = constituentTokens[i];
@@ -522,10 +522,14 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     function getLatestPriceInEthOf(uint8 constituentTokenIndex, uint32 secondsAgo) public view returns (uint) {
         address tokenAddress = constituentTokens[constituentTokenIndex].tokenAddress;
         address wEthAddress = address(i_wEthToken);
-
-        address pool = IUniswapV3Factory(i_uniswapFactory)
-            .getPool(tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
         
+        bytes memory payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
+        (bool success, bytes memory data) = i_uniswapFactory.staticcall(payload);
+        if (!success) {
+            revert PoolDoesNotExist();
+        }
+
+        address pool = abi.decode(data, (address));
         if (pool == address(0)) {
             revert PoolDoesNotExist();
         }
