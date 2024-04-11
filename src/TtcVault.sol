@@ -8,6 +8,7 @@ import "./TTC.sol";
 // Types
 import {Route, Token} from "./types/types.sol";
 import {IUniswapV3PoolDerivedState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolDerivedState.sol";
+import {console} from "forge-std/Test.sol";
 
 // Interfaces
 import "./interfaces/ITtcVault.sol";
@@ -33,6 +34,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     uint24 public constant UNISWAP_PRIMARY_POOL_FEE = 3e3;
     uint24 public constant UNISWAP_SECONDARY_POOL_FEE = 1e4;
     uint24 public constant UNISWAP_TERTIARY_POOL_FEE = 5e2;
+    uint24 public constant UNISWAP_QUATERNARY_POOL_FEE = 1e2; // added via proposal in 2021
     // Balancer rETH/wETH swap fee is 0.04%
     uint24 public constant BALANCER_STABLE_POOL_FEE = 4e2;
     // Max price impact allowed for rocket swap
@@ -522,11 +524,26 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     function getLatestPriceInEthOf(uint8 constituentTokenIndex, uint32 secondsAgo) public view returns (uint) {
         address tokenAddress = constituentTokens[constituentTokenIndex].tokenAddress;
         address wEthAddress = address(i_wEthToken);
-        
+
         bytes memory payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
         (bool success, bytes memory data) = i_uniswapFactory.staticcall(payload);
+
+        // try to find this pool in all three fee tiers
+        // TODO: refactor this abomination
         if (!success) {
-            revert PoolDoesNotExist();
+            payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_SECONDARY_POOL_FEE);
+            (success, data) = i_uniswapFactory.staticcall(payload);
+            if (!success) {
+                payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_TERTIARY_POOL_FEE);
+                (success, data) = i_uniswapFactory.staticcall(payload);
+                if (!success) {
+                    payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_QUATERNARY_POOL_FEE);
+                    (success, data) = i_uniswapFactory.staticcall(payload);
+                    if (!success) {
+                        revert PoolDoesNotExist();
+                    }
+                }
+            }
         }
 
         address pool = abi.decode(data, (address));
