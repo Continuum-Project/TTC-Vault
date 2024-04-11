@@ -189,7 +189,6 @@ contract VaultTest is TtcTestContext {
     function testGetLatestPriceInEthOf() view public {
         // rETH
         uint256 price = vault.getLatestPriceInEthOf(0, 10);
-        console.log(price);
         assertGt(price, 0, "Price of rETH should be greater than 0");
 
         // SHIB

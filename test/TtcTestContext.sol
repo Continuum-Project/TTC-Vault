@@ -23,7 +23,7 @@ contract TtcTestContext is Test {
     address constant ROCKET_SWAP_ROUTER_ADDRESS =
         address(0x16D5A408e807db8eF7c578279BEeEe6b228f1c1C);
     address constant UNISWAP_FACTORY_ADDRESS =
-        address(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
+        address(0x1F98431c8aD98523631AE4a59f267346ea31F984);
 
     TtcVault public vault;
     Token[10] public tokens;
