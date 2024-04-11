@@ -185,4 +185,54 @@ contract VaultTest is TtcTestContext {
             }
         }
     }
+
+    function testGetLatestPriceInEthOf() view public {
+        // rETH
+        uint256 price = vault.getLatestPriceInEthOf(0, 10);
+        console.log(price);
+        assertGt(price, 0, "Price of rETH should be greater than 0");
+
+        // SHIB
+        price = vault.getLatestPriceInEthOf(1, 10);
+        assertGt(price, 0, "Price of SHIB should be greater than 0");
+
+        // TONCOIN
+        price = vault.getLatestPriceInEthOf(2, 10);
+        assertGt(price, 0, "Price of TONCOIN should be greater than 0");
+    }
+
+    // setup tokens weights:
+    // rETH: 50
+    // SHIB: 5
+    // TONCOIN: 5
+    // LINK: 5
+    // wBTC: 5
+    // UNI: 5
+    // MATIC: 5
+    // ARB: 5
+    // MANTLE: 5
+    // MKR: 10
+
+    function testRebalance() public {
+        testInitialMint();
+        console.log(vault.contractAUM());
+
+        // address treasury = makeAddr("treasury");
+        // Route[10][] memory routes = new Route[10][](10);
+        // routes[0][0] = Route(RETH_ADDRESS, WETH_ADDRESS, 1 ether, 1 ether);
+        // // basic rebalance between two tokens
+        // // SUT: rETH, SHIB
+        // vm.startPrank(treasury);
+        // vault.rebalance{value: 1 ether}([45, 10, 5, 5, 5, 5, 5, 5, 5, 5], routes);
+        // vm.stopPrank();
+
+        // TokenBalance[10] memory balances = getVaultBalances();
+        // for (uint8 i; i < 10; i++) {
+        //     assertGt(
+        //         balances[i].balance,
+        //         0,
+        //         "Post-rebalance vault balances should be greater than 0"
+        //     );
+        // }
+    }
 }
