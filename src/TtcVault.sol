@@ -437,8 +437,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
         // perform swaps 
         for (uint8 i; i < 10; i++) {
-            // if the weight is the same, no need to swap
-            if (newWeights[i] == constituentTokens[i].weight) {
+            // if the weight is the same, or no routes provided - no need to swap
+            if (newWeights[i] == constituentTokens[i].weight || routes[i].length == 0) {
                 continue;
             }
             Token memory token = constituentTokens[i];
