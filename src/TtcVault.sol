@@ -7,8 +7,9 @@ import "./TTC.sol";
 
 // Types
 import {Route, Token} from "./types/types.sol";
-import {IUniswapV3PoolDerivedState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolDerivedState.sol";
+import {IUniswapV3PoolState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
 import {console} from "forge-std/Test.sol";
+import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
 // Interfaces
 import "./interfaces/ITtcVault.sol";
@@ -51,6 +52,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
     // Total amount of assets (in terms of ETH) managed by this contract
     uint256 public contractAUM = 0;
+    
 
     // Current tokens and their alloGcations in the vault
     Token[10] constituentTokens;
@@ -460,7 +462,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             constituentTokens[i].weight = newWeights[i];
         }
 
-        uint256 ethPrice = getLatestPriceInEthOf(0, 10); // TODO set seconds ago differently
+        uint256 ethPrice = getLatestPriceInEthOf(0); // TODO set seconds ago differently
         uint256 aumInEth = contractAUM * ethPrice / 1e18;
 
         // find deviations
@@ -469,7 +471,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             Token memory token = constituentTokens[i];
 
             uint256 postSwapTokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
-            uint256 tokenPrice = getLatestPriceInEthOf(i, 10); // get price of token in ETH
+            uint256 tokenPrice = getLatestPriceInEthOf(i); // get price of token in ETH
 
             uint256 tokenValueInEth = (postSwapTokenBalance * tokenPrice) / (10 ** ERC20(token.tokenAddress).decimals()); // get total value of token in ETH in the contract
             uint256 expectedTokenValueInEth = (aumInEth * newWeights[i]) / 100; // get expected value of token in ETH in the contract after rebalancing
@@ -518,10 +520,9 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @notice Get the latest price of a token
      * @dev https://docs.uniswap.org/concepts/protocol/oracle
      * @param constituentTokenIndex The index of the token in the constituentTokens array
-     * @param secondsAgo The number of seconds ago to use for TWAP calculation
      * @return The latest price of one token of the one at index constituentTokenIndex in terms of ETH
      */
-    function getLatestPriceInEthOf(uint8 constituentTokenIndex, uint32 secondsAgo) public view returns (uint) {
+    function getLatestPriceInEthOf(uint8 constituentTokenIndex) public view returns (uint256) {
         address tokenAddress = constituentTokens[constituentTokenIndex].tokenAddress;
         address wEthAddress = address(i_wEthToken);
 
@@ -529,7 +530,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         (bool success, bytes memory data) = i_uniswapFactory.staticcall(payload);
 
         // try to find this pool in all three fee tiers
-        // TODO: refactor this abomination
+        // TODO: refactor this abomination, maybe provide fee tier as a param
         if (!success) {
             payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_SECONDARY_POOL_FEE);
             (success, data) = i_uniswapFactory.staticcall(payload);
@@ -551,24 +552,12 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             revert PoolDoesNotExist();
         }
 
-        IUniswapV3PoolDerivedState _pool = IUniswapV3PoolDerivedState(pool);
+        IUniswapV3PoolState _pool = IUniswapV3PoolState(pool);
 
-        // initialize array for TWAP computation
-        uint32[] memory secondsAgos = new uint32[](2);
-        secondsAgos[0] = 0;
-        secondsAgos[1] = secondsAgo;
+        (uint160 sqrtPriceX96, , , , , ,) = _pool.slot0(); // get sqrtPrice * 2^96
+        uint256 mask = 10 ** ERC20(tokenAddress).decimals();
+        uint256 sqrtPrice = (sqrtPriceX96 * mask) / 2 ** 96; // get sqrtPrice with decimals of token
 
-        (int56[] memory tickCumulatives, ) = _pool.observe(secondsAgos);
-        
-        // get the price of the token in terms of ETH
-        int56 tickDiff = tickCumulatives[0] - tickCumulatives[1];
-        int56 avgTick = tickDiff / int56(int32(secondsAgo));
-
-        int256 price = tickDiff / avgTick;
-        if (price <= 0) {
-            revert NegativePrice();
-        }
-
-        return uint256(price);
+        return sqrtPrice ** 2 / mask; // get price of token in ETH, remove added decimals of token
     }
 }

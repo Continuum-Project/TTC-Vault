@@ -18,6 +18,7 @@ interface ITtcVault {
     error InvalidWeights();
     error PoolDoesNotExist();
     error NegativePrice();
+    error NegativeTick();
 
     // Events
     /// @notice event for minting
