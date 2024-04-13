@@ -8,7 +8,6 @@ import "./TTC.sol";
 // Types
 import {Route, Token} from "./types/types.sol";
 import {IUniswapV3PoolState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
-import {console} from "forge-std/Test.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
 // Interfaces
@@ -376,11 +375,11 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @notice Executes a swap using Uniswap V3 for a given token pair and amount.
      * @param _tokenIn The address of the token to swap from.
      * @param _tokenOut The address of the token to swap to.
-     * @param _amount The amount of `tokenIn` to swap.
+     * @param _amountIn The amount of `tokenIn` to swap.
      * @return amountOut The amount of tokens received from the swap.
      * @return feeTier The pool fee used for the swap.
      */
-    function executeUniswapSwap(address _tokenIn, address _tokenOut, uint256 _amount, uint256 amountOutMinimum)
+    function executeUniswapSwap(address _tokenIn, address _tokenOut, uint256 _amountIn, uint256 amountOutMinimum)
         internal
         returns (uint256 amountOut, uint24 feeTier)
     {
@@ -390,7 +389,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             fee: UNISWAP_PRIMARY_POOL_FEE, // Initially set primary fee pool
             recipient: address(this), // Send tokens to TTC vault
             deadline: block.timestamp, // Swap must be performed in the current block. This should be passed in as a parameter to mitigate MEV exploits.
-            amountIn: _amount, // Amount of tokenIn to swap
+            amountIn: _amountIn, // Amount of tokenIn to swap
             amountOutMinimum: amountOutMinimum, // Receive whatever we can get for now (should set in production)
             sqrtPriceLimitX96: 0 // Ignore for now (should set in production to reduce price impact)
         });
@@ -433,7 +432,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                 continue;
             }
             Token memory token = constituentTokens[i];
-            uint256 preSwapTokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
+            // uint256 preSwapTokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
 
             // perform swap
             for (uint8 j; j < routes[i].length; j++) {
@@ -443,55 +442,60 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
                 Route calldata route = routes[i][j];
                 IERC20(token.tokenAddress).approve(address(i_swapRouter), route.amountIn);
-
+                
                 // Execute swap. todo: do we need return values here?
                 // (uint256 amountSwapped, uint24 feeTier) = executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
                 executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
             }
-
-            // update token weight
-            constituentTokens[i].weight = newWeights[i];
         }
 
         (uint256[10] memory aumPerToken, uint256 totalAUM) = aumBreakdown();
-
+        
         // find deviations
         for (uint8 i; i < 10; i++) {
+            // skip if the weight is the same
+            if (newWeights[i] == constituentTokens[i].weight) {
+                continue;
+            }
+
             // calculate deviations
-            Token memory token = constituentTokens[i];
-
-            uint256 postSwapTokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
-            uint256 tokenPrice = aumPerToken[i]; // get price of token in ETH
-
-            uint256 tokenValueInEth = (postSwapTokenBalance * tokenPrice) / (10 ** ERC20(token.tokenAddress).decimals()); // get total value of token in ETH in the contract
+            uint256 tokenValueInEth = aumPerToken[i]; // get price of token in ETH
             uint256 expectedTokenValueInEth = (totalAUM * newWeights[i]) / 100; // get expected value of token in ETH in the contract after rebalancing
 
             // calculate deviation of actual token value from expected token value in ETH
             deviations[i] = int256(expectedTokenValueInEth) - int256(tokenValueInEth);
         }
 
-        for (uint8 i; i < 10; i++) {
-            console.log("Token: ", i);
-            console.log("Deviation: ", uint(deviations[i]));
-        }
-
         // TODO: consider checking the fraction of deviations, so we can abort if they are too big
 
         // correct deviations
         for (uint8 i; i < 10; i++) {
-            Token memory token = constituentTokens[i];
+            address tokenAddress = constituentTokens[i].tokenAddress;
             int256 deviation = deviations[i];
             if (deviation > 0) {
                 uint256 uDeviation = uint256(deviation);
-                // swap token for ETH
-                IERC20(token.tokenAddress).approve(address(i_swapRouter), uDeviation);
-                executeUniswapSwap(token.tokenAddress, address(i_wEthToken), uDeviation, 0);
+
+                // wrap eth for a swap
+                IWETH(address(i_wEthToken)).deposit{value: uDeviation}();
+                
+                // swap ETH for Token
+                IWETH(address(i_wEthToken)).approve(address(i_swapRouter), uDeviation);
+                executeUniswapSwap(address(i_wEthToken), tokenAddress, uDeviation, 0);
             } else if (deviation < 0) {
-                // swap ETH for token
-                uint256 ethAmount = uint256(-deviation);
-                IWETH(address(i_wEthToken)).approve(address(i_swapRouter), ethAmount);
-                executeUniswapSwap(address(i_wEthToken), token.tokenAddress, ethAmount, 0);
+                // swap Token for ETH
+                uint256 uDeviation = uint256(-deviation);
+
+                uint256 tokenValueInEth = aumPerToken[i];
+                uint256 deviationToSellInToken = uDeviation * 10 ** ERC20(tokenAddress).decimals() / tokenValueInEth;
+
+                IERC20(tokenAddress).approve(address(i_swapRouter), deviationToSellInToken);
+                executeUniswapSwap(tokenAddress, address(i_wEthToken), deviationToSellInToken, 0);
             }
+        }
+
+        // update weights
+        for (uint8 i; i < 10; i++) {
+            constituentTokens[i].weight = newWeights[i];
         }
 
         emit Rebalanced(newWeights);
@@ -549,7 +553,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         IUniswapV3PoolState _pool = IUniswapV3PoolState(pool);
 
         (uint160 sqrtPriceX96, , , , , ,) = _pool.slot0(); // get sqrtPrice * 2^96
-        uint256 decimals = 10 ** ERC20(tokenAddress).decimals(); // address case when token's decimals is not 18
+        uint256 decimals = 10 ** ERC20(tokenAddress).decimals(); // TODO: address case when token's decimals is not 18
         uint256 sqrtPrice = (sqrtPriceX96 * decimals) / 2 ** 96; // get sqrtPrice with decimals of token
 
         return sqrtPrice ** 2 / decimals; // get price of token in ETH, remove added decimals of token due to squaring
