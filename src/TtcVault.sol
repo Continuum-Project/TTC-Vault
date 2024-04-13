@@ -585,10 +585,10 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         uint256[10] memory aumPerToken;
         uint256 totalAum;
         for (uint8 i; i < 10; i++) {
-            Token memory token = constituentTokens[i];
+            address tokenAddress = constituentTokens[i].tokenAddress;
             uint256 tokenPrice = getLatestPriceInEthOf(i);
-            uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
-            aumPerToken[i] = (tokenBalance * tokenPrice) / (10 ** ERC20(token.tokenAddress).decimals());
+            uint256 tokenBalance = IERC20(tokenAddress).balanceOf(address(this));
+            aumPerToken[i] = (tokenBalance * tokenPrice) / (10 ** ERC20(tokenAddress).decimals());
             totalAum += aumPerToken[i];
         }
 
