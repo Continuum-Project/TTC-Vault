@@ -429,7 +429,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         // perform swaps 
         for (uint8 i; i < 10; i++) {
             // if the weight is the same, or no routes provided - no need to swap
-            if (newWeights[i] == constituentTokens[i].weight || routes[i].length == 0) {
+            if (newWeights[i] == constituentTokens[i].weight || routes[i][0].tokenIn == address(0)) {
                 continue;
             }
             Token memory token = constituentTokens[i];
@@ -437,8 +437,12 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
             // perform swap
             for (uint8 j; j < routes[i].length; j++) {
+                if (routes[i][j].tokenIn == address(0)) {
+                    break;
+                }
+
                 Route calldata route = routes[i][j];
-                IERC20(token.tokenAddress).approve(address(i_swapRouter), preSwapTokenBalance);
+                IERC20(token.tokenAddress).approve(address(i_swapRouter), route.amountIn);
 
                 // Execute swap. todo: do we need return values here?
                 // (uint256 amountSwapped, uint24 feeTier) = executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
@@ -464,6 +468,11 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
             // calculate deviation of actual token value from expected token value in ETH
             deviations[i] = int256(expectedTokenValueInEth) - int256(tokenValueInEth);
+        }
+
+        for (uint8 i; i < 10; i++) {
+            console.log("Token: ", i);
+            console.log("Deviation: ", uint(deviations[i]));
         }
 
         // TODO: consider checking the fraction of deviations, so we can abort if they are too big
