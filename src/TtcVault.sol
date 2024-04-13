@@ -467,6 +467,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         }
 
         // TODO: consider checking the fraction of deviations, so we can abort if they are too big
+        
+        uint256 amountForDeviationCorrection = msg.value;
 
         // correct deviations
         for (uint8 i; i < 10; i++) {
@@ -477,6 +479,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
                 // wrap eth for a swap
                 IWETH(address(i_wEthToken)).deposit{value: uDeviation}();
+                amountForDeviationCorrection -= uDeviation;
                 
                 // swap ETH for Token
                 IWETH(address(i_wEthToken)).approve(address(i_swapRouter), uDeviation);
@@ -496,6 +499,11 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         // update weights
         for (uint8 i; i < 10; i++) {
             constituentTokens[i].weight = newWeights[i];
+        }
+
+        // send remaining amountToDeviationCorrection back to treasury
+        if (amountForDeviationCorrection > 0) {
+            i_continuumTreasury.transfer(amountForDeviationCorrection);
         }
 
         emit Rebalanced(newWeights);
