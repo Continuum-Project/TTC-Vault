@@ -541,6 +541,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
         // get a token/wETH pool's address
         
+        // payload to get a pool address
         bytes memory payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
         (bool success, bytes memory data) = i_uniswapFactory.staticcall(payload);
 
