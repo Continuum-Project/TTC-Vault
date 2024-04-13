@@ -50,10 +50,6 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     IWETH public immutable i_wEthToken;
     IrETH public immutable i_rEthToken;
 
-    // Total amount of assets (in terms of ETH) managed by this contract
-    uint256 public contractAUM = 0;
-    
-
     // Current tokens and their alloGcations in the vault
     Token[10] constituentTokens;
 
@@ -183,9 +179,6 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             amountToMint = 1 * (10 ** i_ttcToken.decimals());
         }
 
-        // set total value of assets in the vault equal to the aum
-        contractAUM = aum;
-
         // Mint TTC to the minter
         i_ttcToken.mint(msg.sender, amountToMint);
         emit Minted(msg.sender, msg.value, amountToMint);
@@ -225,9 +218,6 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         i_continuumTreasury.transfer(fee + rEthProfit);
         ethAllocationREth -= ethChange;
 
-        // remove the redeemed amount from the total supply
-        contractAUM -= ethAllocationAmountPostSwap + fee;
-
         for (uint8 i = 1; i < 10; i++) {
             Token memory token = constituentTokens[i];
             uint256 balanceOfAsset = IERC20(token.tokenAddress).balanceOf(address(this));
@@ -243,9 +233,6 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             if (!IERC20(token.tokenAddress).transfer(i_continuumTreasury, fee)) {
                 revert TreasuryTransferFailed();
             }
-
-            // Update the total value of assets in the vault
-            contractAUM -= amountToTransfer;
         }
 
         // Burn the TTC redeemed
@@ -462,8 +449,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             constituentTokens[i].weight = newWeights[i];
         }
 
-        uint256 ethPrice = getLatestPriceInEthOf(0); // TODO set seconds ago differently
-        uint256 aumInEth = contractAUM * ethPrice / 1e18;
+        (uint256[10] memory aumPerToken, uint256 totalAUM) = aumBreakdown();
 
         // find deviations
         for (uint8 i; i < 10; i++) {
@@ -471,10 +457,10 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             Token memory token = constituentTokens[i];
 
             uint256 postSwapTokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
-            uint256 tokenPrice = getLatestPriceInEthOf(i); // get price of token in ETH
+            uint256 tokenPrice = aumPerToken[i]; // get price of token in ETH
 
             uint256 tokenValueInEth = (postSwapTokenBalance * tokenPrice) / (10 ** ERC20(token.tokenAddress).decimals()); // get total value of token in ETH in the contract
-            uint256 expectedTokenValueInEth = (aumInEth * newWeights[i]) / 100; // get expected value of token in ETH in the contract after rebalancing
+            uint256 expectedTokenValueInEth = (totalAUM * newWeights[i]) / 100; // get expected value of token in ETH in the contract after rebalancing
 
             // calculate deviation of actual token value from expected token value in ETH
             deviations[i] = int256(expectedTokenValueInEth) - int256(tokenValueInEth);
@@ -558,5 +544,23 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         uint256 sqrtPrice = (sqrtPriceX96 * decimals) / 2 ** 96; // get sqrtPrice with decimals of token
 
         return sqrtPrice ** 2 / decimals; // get price of token in ETH, remove added decimals of token due to squaring
+    }
+
+    /**
+     * @notice Get the AUM of the vault in ETH per each token and the total AUM
+     * @return The AUM of the vault in ETH
+     */
+    function aumBreakdown() public view returns (uint256[10] memory, uint256) {
+        uint256[10] memory aumPerToken;
+        uint256 totalAum;
+        for (uint8 i; i < 10; i++) {
+            Token memory token = constituentTokens[i];
+            uint256 tokenPrice = getLatestPriceInEthOf(i);
+            uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
+            aumPerToken[i] = (tokenBalance * tokenPrice) / (10 ** ERC20(token.tokenAddress).decimals());
+            totalAum += aumPerToken[i];
+        }
+
+        return (aumPerToken, totalAum);
     }
 }
