@@ -518,9 +518,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
     /**
      * @notice Get the latest price of a token
-     * @dev https://docs.uniswap.org/concepts/protocol/oracle
      * @param constituentTokenIndex The index of the token in the constituentTokens array
-     * @return The latest price of one token of the one at index constituentTokenIndex in terms of ETH
+     * @return The number of ETH that has to be paid for 1 constituent token
      */
     function getLatestPriceInEthOf(uint8 constituentTokenIndex) public view returns (uint256) {
         address tokenAddress = constituentTokens[constituentTokenIndex].tokenAddress;
@@ -555,9 +554,9 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         IUniswapV3PoolState _pool = IUniswapV3PoolState(pool);
 
         (uint160 sqrtPriceX96, , , , , ,) = _pool.slot0(); // get sqrtPrice * 2^96
-        uint256 mask = 10 ** ERC20(tokenAddress).decimals();
-        uint256 sqrtPrice = (sqrtPriceX96 * mask) / 2 ** 96; // get sqrtPrice with decimals of token
+        uint256 decimals = 10 ** ERC20(tokenAddress).decimals(); // address case when token's decimals is not 18
+        uint256 sqrtPrice = (sqrtPriceX96 * decimals) / 2 ** 96; // get sqrtPrice with decimals of token
 
-        return sqrtPrice ** 2 / mask; // get price of token in ETH, remove added decimals of token
+        return sqrtPrice ** 2 / decimals; // get price of token in ETH, remove added decimals of token due to squaring
     }
 }
