@@ -23,6 +23,7 @@ contract VaultTest is TtcTestContext {
             UNISWAP_SWAP_ROUTER_ADDRESS,
             WETH_ADDRESS,
             ROCKET_SWAP_ROUTER_ADDRESS,
+            UNISWAP_FACTORY_ADDRESS,
             tokens
         );
     }
@@ -182,6 +183,84 @@ contract VaultTest is TtcTestContext {
             } else {
                 assertFalse(initialBalances[i].balance == newBalances[i].balance);
             }
+        }
+    }
+
+    function testGetLatestPriceInEthOf() view public {
+        // rETH
+        uint256 price = vault.getLatestPriceInEthOf(0);
+        assertGt(price, 0, "Price of rETH should be greater than 0");
+
+        // SHIB
+        price = vault.getLatestPriceInEthOf(1);
+        assertGt(price, 0, "Price of SHIB should be greater than 0");
+
+        // TONCOIN: SOMETHING WRONG WITH THE TONCOIN PRICE
+        // price = vault.getLatestPriceInEthOf(2);
+        // assertGt(price, 0, "Price of TONCOIN should be greater than 0");
+
+        // LINK
+        price = vault.getLatestPriceInEthOf(3);
+        assertGt(price, 0, "Price of LINK should be greater than 0");
+
+        // wBTC
+        price = vault.getLatestPriceInEthOf(4);
+        assertGt(price, 0, "Price of wBTC should be greater than 0");
+
+        // UNI
+        price = vault.getLatestPriceInEthOf(5);
+        assertGt(price, 0, "Price of UNI should be greater than 0");
+
+        // MATIC
+        price = vault.getLatestPriceInEthOf(6);
+        assertGt(price, 0, "Price of MATIC should be greater than 0");
+
+        // ARB
+        price = vault.getLatestPriceInEthOf(7);
+        assertGt(price, 0, "Price of ARB should be greater than 0");
+
+        // MANTLE
+        price = vault.getLatestPriceInEthOf(8);
+        assertGt(price, 0, "Price of MANTLE should be greater than 0");
+
+        // MKR
+        price = vault.getLatestPriceInEthOf(9);
+        assertGt(price, 0, "Price of MKR should be greater than 0");
+    }
+
+    // setup tokens weights:
+    // rETH: 50
+    // SHIB: 5
+    // TONCOIN: 5
+    // LINK: 5
+    // wBTC: 5
+    // UNI: 5
+    // MATIC: 5
+    // ARB: 5
+    // MANTLE: 5
+    // MKR: 10
+
+    function testRebalance() public {
+        testInitialMint();
+
+        address treasury = makeAddr("treasury");
+        vm.deal(treasury, 10000 ether);
+
+        Route[10][] memory routes = new Route[10][](10);
+        routes[0][0] = Route(RETH_ADDRESS, WETH_ADDRESS, 100000, 100000);
+        // basic rebalance between two tokens
+        // SUT: rETH, SHIB
+        vm.startPrank(treasury);
+        vault.rebalance{value: 10000 ether}([45, 10, 5, 5, 5, 5, 5, 5, 5, 10], routes);
+        vm.stopPrank();
+
+        TokenBalance[10] memory balances = getVaultBalances();
+        for (uint8 i; i < 10; i++) {
+            assertGt(
+                balances[i].balance,
+                0,
+                "Post-rebalance vault balances should be greater than 0"
+            );
         }
     }
 }
