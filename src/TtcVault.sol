@@ -9,7 +9,6 @@ import "./TTC.sol";
 import {Route, Token} from "./types/types.sol";
 import {IUniswapV3PoolState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
-import {console} from "forge-std/console.sol";
 
 // Interfaces
 import "./interfaces/ITtcVault.sol";
@@ -447,7 +446,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                 Route calldata route = routes[i][j];
                 IERC20(token.tokenAddress).approve(address(i_swapRouter), route.amountIn);
                 
-                // Execute swap. todo: do we need return values here?
+                // Execute swap.
                 executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
             }
         }
@@ -574,7 +573,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         IUniswapV3PoolState _pool = IUniswapV3PoolState(pool);
 
         (uint160 sqrtPriceX96, , , , , ,) = _pool.slot0(); // get sqrtPrice of a pool multiplied by 2^96
-        uint256 decimals = 10 ** ERC20(tokenAddress).decimals(); // TODO: address case when token's decimals is not 18
+        uint256 decimals = 10 ** ERC20(tokenAddress).decimals();
         uint256 sqrtPrice = (sqrtPriceX96 * decimals) / 2 ** 96; // get sqrtPrice with decimals of token
 
         uint256 result = sqrtPrice ** 2 / decimals;
