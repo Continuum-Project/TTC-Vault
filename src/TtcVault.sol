@@ -9,6 +9,7 @@ import "./TTC.sol";
 import {Route, Token} from "./types/types.sol";
 import {IUniswapV3PoolState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import {console} from "forge-std/console.sol";
 
 // Interfaces
 import "./interfaces/ITtcVault.sol";
@@ -459,6 +460,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         for (uint8 i; i < 10; i++) {
             // skip if the weight is the same
             if (newWeights[i] == constituentTokens[i].weight) {
+                deviations[i] = 0;
                 continue;
             }
 
@@ -572,10 +574,11 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         IUniswapV3PoolState _pool = IUniswapV3PoolState(pool);
 
         (uint160 sqrtPriceX96, , , , , ,) = _pool.slot0(); // get sqrtPrice of a pool multiplied by 2^96
-        uint256 decimals = 10 ** ETH_DECIMALS; // TODO: address case when token's decimals is not 18
+        uint256 decimals = 10 ** ERC20(tokenAddress).decimals(); // TODO: address case when token's decimals is not 18
         uint256 sqrtPrice = (sqrtPriceX96 * decimals) / 2 ** 96; // get sqrtPrice with decimals of token
 
-        return sqrtPrice ** 2 / decimals; // get price of token in ETH, remove added decimals of token due to squaring
+        uint256 result = sqrtPrice ** 2 / decimals;
+        return result; // get price of token in ETH, remove added decimals of token due to squaring
     }
 
     /**
