@@ -284,10 +284,10 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         // since routes could be calculated in a block with different prices, we need to check if the deviations are not too big
         for (uint8 i; i < 10; i++) {
             // skip if the weight is the same
-            if (newWeights[i] == constituentTokens[i].weight) {
-                deviations[i] = 0;
-                continue;
-            }
+            // if (newWeights[i] == constituentTokens[i].weight) {
+            //     deviations[i] = 0;
+            //     continue;
+            // }
 
             // calculate deviations
             uint256 tokenValueInEth = aumPerToken[i]; // get price of token in ETH
@@ -341,6 +341,27 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         }
 
         emit Rebalanced(newWeights);
+    }
+    
+    /**
+     * @notice Changes the tokens and their allocations in the vault.
+     * @dev Assumption: if the token remains in the vault, it should be on the same index in _newTokens as currently stored in constituentTokens
+     * @param _newTokens The new set of tokens and their allocations for the vault.
+     */
+    function reconstitute(
+        Token[10] calldata _newTokens, 
+        uint8[10] calldata _newIndices
+    ) public payable onlyTreasury {
+        if (!checkTokenList(_newTokens)) {
+            revert InvalidTokenList();
+        }
+        
+        for (uint8 i; i < 10; i++) {
+            address predecessorAddress = constituentTokens[i].tokenAddress;
+            address newTokenAddress = _newTokens[_newIndices[i]].tokenAddress;
+
+            // swap all predecessorAddress tokens for newTokenAddress
+        }
     }
 
     /**
