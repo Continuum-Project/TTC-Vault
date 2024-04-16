@@ -345,6 +345,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
     /**
      * @notice Reconstitutes the vault's portfolio with a new set of tokens.
+     * @dev TODO: remove
      * @param _newTokens The new set of tokens and their allocations for the vault.
      */
     function naiveReconstitution(Token[10] calldata _newTokens) public onlyTreasury {
