@@ -15,7 +15,6 @@ import "./interfaces/ITtcVault.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@rocketpool-router/contracts/RocketSwapRouter.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@uniswap/v4-periphery/contracts/libraries/Oracle.sol";
 
 /**
  * @title TtcVault
@@ -242,6 +241,110 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     }
 
     /**
+     * @notice Rebalances the vault's portfolio with a new set of tokens and their allocations.
+     * @dev If routes are slightly outdated, the deviations are corrected by buying/selling the tokens using ETH as a proxy.
+     * @param newWeights The new weights for the tokens in the vault.
+     * @param routes The routes for the swaps to be executed. Route[i] corresponds to the best route for rebalancing token[i]
+     */
+    function rebalance(uint8[10] calldata newWeights, Route[10][] calldata routes) public payable onlyTreasury nonReentrant {
+        if (!validWeights(newWeights)) {
+            revert InvalidWeights();
+        }
+
+        // deviations correspond to the difference between the expected new amount of each token and the actual amount
+        // not percentages, concrete values
+        int256[10] memory deviations;
+
+        // perform swaps 
+        for (uint8 i; i < 10; i++) {
+            // if the weight is the same, or no routes provided - no need to swap
+            if (newWeights[i] == constituentTokens[i].weight || routes[i][0].tokenIn == address(0)) {
+                continue;
+            }
+            Token memory token = constituentTokens[i];
+
+            // perform swap
+            for (uint8 j; j < routes[i].length; j++) {
+                if (routes[i][j].tokenIn == address(0)) {
+                    break;
+                }
+
+                // get routes for the swap
+                Route calldata route = routes[i][j];
+                IERC20(token.tokenAddress).approve(address(i_swapRouter), route.amountIn);
+                
+                // Execute swap.
+                executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
+            }
+        }
+
+        // get ethereum amount of each token in the vault (aumPerToken) and total ethereum amount in the vault (totalAUM)
+        (uint256[10] memory aumPerToken, uint256 totalAUM) = aumBreakdown();
+        
+        // find deviations from the expected amount in the vault of each token
+        // since routes could be calculated in a block with different prices, we need to check if the deviations are not too big
+        for (uint8 i; i < 10; i++) {
+            // skip if the weight is the same
+            if (newWeights[i] == constituentTokens[i].weight) {
+                deviations[i] = 0;
+                continue;
+            }
+
+            // calculate deviations
+            uint256 tokenValueInEth = aumPerToken[i]; // get price of token in ETH
+            uint256 expectedTokenValueInEth = (totalAUM * newWeights[i]) / 100; // get expected value of token in ETH in the contract after rebalancing
+
+            // calculate deviation of actual token value from expected token value in ETH
+            deviations[i] = int256(expectedTokenValueInEth) - int256(tokenValueInEth);
+        }
+
+        // TODO: consider checking the fraction of deviations, so we can abort if they are too big
+        
+        // msg.value is used to correct positive deviations
+        // positive deviation corresponds to the fact that we expect more of the token in the vault than we have -> buy it with eth
+        uint256 amountForDeviationCorrection = msg.value;
+
+        // correct deviations
+        for (uint8 i; i < 10; i++) {
+            address tokenAddress = constituentTokens[i].tokenAddress;
+            int256 deviation = deviations[i];
+            if (deviation > 0) { // -> need to buy more of this token (amount < expected)
+                // absolute value of deviation
+                uint256 uDeviation = uint256(deviation);
+
+                // wrap eth for a swap
+                IWETH(address(i_wEthToken)).deposit{value: uDeviation}();
+                amountForDeviationCorrection -= uDeviation; // track how much eth we have left to send back to treasury
+                
+                // swap ETH for Token
+                IWETH(address(i_wEthToken)).approve(address(i_swapRouter), uDeviation);
+                executeUniswapSwap(address(i_wEthToken), tokenAddress, uDeviation, 0);
+            } else if (deviation < 0) { // need to sell a token (amount > expected)
+                // absolute value of deviation
+                uint256 uDeviation = uint256(-deviation);
+
+                uint256 tokenValueInEth = aumPerToken[i];
+                uint256 deviationToSellInToken = uDeviation * 10 ** ERC20(tokenAddress).decimals() / tokenValueInEth;
+
+                IERC20(tokenAddress).approve(address(i_swapRouter), deviationToSellInToken);
+                executeUniswapSwap(tokenAddress, address(i_wEthToken), deviationToSellInToken, 0);
+            }
+        }
+
+        // update weights
+        for (uint8 i; i < 10; i++) {
+            constituentTokens[i].weight = newWeights[i];
+        }
+
+        // send remaining amountToDeviationCorrection back to treasury
+        if (amountForDeviationCorrection > 0) {
+            i_continuumTreasury.transfer(amountForDeviationCorrection);
+        }
+
+        emit Rebalanced(newWeights);
+    }
+
+    /**
      * @notice Reconstitutes the vault's portfolio with a new set of tokens.
      * @param _newTokens The new set of tokens and their allocations for the vault.
      */
@@ -411,110 +514,6 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                 return (i_swapRouter.exactInputSingle(params), params.fee);
             }
         }
-    }
-
-    /**
-     * @notice Rebalances the vault's portfolio with a new set of tokens and their allocations.
-     * @dev If routes are slightly outdated, the deviations are corrected by buying/selling the tokens using ETH as a proxy.
-     * @param newWeights The new weights for the tokens in the vault.
-     * @param routes The routes for the swaps to be executed. Route[i] corresponds to the best route for rebalancing token[i]
-     */
-    function rebalance(uint8[10] calldata newWeights, Route[10][] calldata routes) public payable onlyTreasury nonReentrant {
-        if (!validWeights(newWeights)) {
-            revert InvalidWeights();
-        }
-
-        // deviations correspond to the difference between the expected new amount of each token and the actual amount
-        // not percentages, concrete values
-        int256[10] memory deviations;
-
-        // perform swaps 
-        for (uint8 i; i < 10; i++) {
-            // if the weight is the same, or no routes provided - no need to swap
-            if (newWeights[i] == constituentTokens[i].weight || routes[i][0].tokenIn == address(0)) {
-                continue;
-            }
-            Token memory token = constituentTokens[i];
-
-            // perform swap
-            for (uint8 j; j < routes[i].length; j++) {
-                if (routes[i][j].tokenIn == address(0)) {
-                    break;
-                }
-
-                // get routes for the swap
-                Route calldata route = routes[i][j];
-                IERC20(token.tokenAddress).approve(address(i_swapRouter), route.amountIn);
-                
-                // Execute swap.
-                executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
-            }
-        }
-
-        // get ethereum amount of each token in the vault (aumPerToken) and total ethereum amount in the vault (totalAUM)
-        (uint256[10] memory aumPerToken, uint256 totalAUM) = aumBreakdown();
-        
-        // find deviations from the expected amount in the vault of each token
-        // since routes could be calculated in a block with different prices, we need to check if the deviations are not too big
-        for (uint8 i; i < 10; i++) {
-            // skip if the weight is the same
-            if (newWeights[i] == constituentTokens[i].weight) {
-                deviations[i] = 0;
-                continue;
-            }
-
-            // calculate deviations
-            uint256 tokenValueInEth = aumPerToken[i]; // get price of token in ETH
-            uint256 expectedTokenValueInEth = (totalAUM * newWeights[i]) / 100; // get expected value of token in ETH in the contract after rebalancing
-
-            // calculate deviation of actual token value from expected token value in ETH
-            deviations[i] = int256(expectedTokenValueInEth) - int256(tokenValueInEth);
-        }
-
-        // TODO: consider checking the fraction of deviations, so we can abort if they are too big
-        
-        // msg.value is used to correct positive deviations
-        // positive deviation corresponds to the fact that we expect more of the token in the vault than we have -> buy it with eth
-        uint256 amountForDeviationCorrection = msg.value;
-
-        // correct deviations
-        for (uint8 i; i < 10; i++) {
-            address tokenAddress = constituentTokens[i].tokenAddress;
-            int256 deviation = deviations[i];
-            if (deviation > 0) { // -> need to buy more of this token (amount < expected)
-                // absolute value of deviation
-                uint256 uDeviation = uint256(deviation);
-
-                // wrap eth for a swap
-                IWETH(address(i_wEthToken)).deposit{value: uDeviation}();
-                amountForDeviationCorrection -= uDeviation; // track how much eth we have left to send back to treasury
-                
-                // swap ETH for Token
-                IWETH(address(i_wEthToken)).approve(address(i_swapRouter), uDeviation);
-                executeUniswapSwap(address(i_wEthToken), tokenAddress, uDeviation, 0);
-            } else if (deviation < 0) { // need to sell a token (amount > expected)
-                // absolute value of deviation
-                uint256 uDeviation = uint256(-deviation);
-
-                uint256 tokenValueInEth = aumPerToken[i];
-                uint256 deviationToSellInToken = uDeviation * 10 ** ERC20(tokenAddress).decimals() / tokenValueInEth;
-
-                IERC20(tokenAddress).approve(address(i_swapRouter), deviationToSellInToken);
-                executeUniswapSwap(tokenAddress, address(i_wEthToken), deviationToSellInToken, 0);
-            }
-        }
-
-        // update weights
-        for (uint8 i; i < 10; i++) {
-            constituentTokens[i].weight = newWeights[i];
-        }
-
-        // send remaining amountToDeviationCorrection back to treasury
-        if (amountForDeviationCorrection > 0) {
-            i_continuumTreasury.transfer(amountForDeviationCorrection);
-        }
-
-        emit Rebalanced(newWeights);
     }
 
     /**
