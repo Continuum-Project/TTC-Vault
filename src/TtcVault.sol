@@ -8,7 +8,6 @@ import "./TTC.sol";
 // Types
 import {Route, Token} from "./types/types.sol";
 import {IUniswapV3PoolState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
-import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
 // Interfaces
 import "./interfaces/ITtcVault.sol";
