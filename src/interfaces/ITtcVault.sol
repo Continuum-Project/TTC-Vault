@@ -2,7 +2,7 @@
 
 pragma solidity 0.8.20;
 
-import {Route} from "../types/types.sol";
+import {Route, Token} from "../types/types.sol";
 
 interface ITtcVault {
     // Errors
@@ -19,6 +19,7 @@ interface ITtcVault {
     error PoolDoesNotExist();
     error NegativePrice();
     error NegativeTick();
+    error InvalidRoute();
 
     // Events
     /// @notice event for minting
@@ -28,7 +29,7 @@ interface ITtcVault {
     event Redeemed(address indexed sender, uint256 ttcAmount);
 
     /// @notice event for rebalancing
-    event Rebalanced(uint8[10] newWeights);
+    event Rebalanced(Token[10] _newTokens);
 
     // Methods
     /// @notice mint tokens for msg.value to msg.sender
@@ -38,5 +39,5 @@ interface ITtcVault {
     function redeem(uint256 _ttcAmount, uint256[2] memory _rocketSwapPortions) external;
     
     /// @notice Rebalance the vault
-    function rebalance(uint8[10] memory _newWeights, Route[10][] calldata routes) external payable;
+    function rebalance(Token[10] calldata _newTokens, Route[10][] calldata routes) external payable;
 }

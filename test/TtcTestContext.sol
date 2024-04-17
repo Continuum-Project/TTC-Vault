@@ -25,6 +25,17 @@ contract TtcTestContext is Test {
     address constant UNISWAP_FACTORY_ADDRESS =
         address(0x1F98431c8aD98523631AE4a59f267346ea31F984);
 
+    // TOKEN ADDRESSES
+    address constant SHIB_ADDRESS = address(0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE);
+    address constant TONCOIN_ADDRESS = address(0x582d872A1B094FC48F5DE31D3B73F2D9bE47def1);
+    address constant LINK_ADDRESS = address(0x514910771AF9Ca656af840dff83E8264EcF986CA);
+    address constant WBTC_ADDRESS = address(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
+    address constant UNI_ADDRESS = address(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984);
+    address constant MATIC_ADDRESS = address(0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0);
+    address constant ARB_ADDRESS = address(0xB50721BCf8d664c30412Cfbc6cf7a15145234ad1);
+    address constant MANTLE_ADDRESS = address(0x3c3a81e81dc49A522A592e7622A7E711c06bf354);
+    address constant MKR_ADDRESS = address(0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2);
+
     TtcVault public vault;
     Token[10] public tokens;
 
@@ -73,63 +84,63 @@ contract TtcTestContext is Test {
         tokens[1] = (
             Token(
                 5,
-                address(0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE)
+                SHIB_ADDRESS
             )
         );
         // TONCOIN Token
         tokens[2] = (
             Token(
                 5,
-                address(0x582d872A1B094FC48F5DE31D3B73F2D9bE47def1)
+                TONCOIN_ADDRESS
             )
         );
         // LINK Token
         tokens[3] = (
             Token(
                 5,
-                address(0x514910771AF9Ca656af840dff83E8264EcF986CA)
+                LINK_ADDRESS
             )
         );
         // wBTC Token
         tokens[4] = (
             Token(
                 5,
-                address(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599)
+                WBTC_ADDRESS
             )
         );
         // UNI Token
         tokens[5] = (
             Token(
                 5,
-                address(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984)
+                UNI_ADDRESS
             )
         );
         // MATIC Token
         tokens[6] = (
             Token(
                 5,
-                address(0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0)
+                MATIC_ADDRESS
             )
         );
         // ARB Token
         tokens[7] = (
             Token(
                 5,
-                address(0xB50721BCf8d664c30412Cfbc6cf7a15145234ad1)
+                ARB_ADDRESS
             )
         );
         // MANTLE Token
         tokens[8] = (
             Token(
                 5,
-                address(0x3c3a81e81dc49A522A592e7622A7E711c06bf354)
+                MANTLE_ADDRESS
             )
         );
         // MKR Token
         tokens[9] = (
             Token(
                 10,
-                address(0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2)
+                MKR_ADDRESS
             )
         );
         // BNB Token

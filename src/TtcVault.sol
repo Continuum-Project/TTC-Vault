@@ -8,6 +8,7 @@ import "./TTC.sol";
 // Types
 import {Route, Token} from "./types/types.sol";
 import {IUniswapV3PoolState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
+// import {console} from "forge-std/Test.sol";
 
 // Interfaces
 import "./interfaces/ITtcVault.sol";
@@ -242,12 +243,12 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     /**
      * @notice Rebalances the vault's portfolio with a new set of tokens and their allocations.
      * @dev If routes are slightly outdated, the deviations are corrected by buying/selling the tokens using ETH as a proxy.
-     * @param newWeights The new weights for the tokens in the vault.
+     * @param _newTokens The new weights for the tokens in the vault.
      * @param routes The routes for the swaps to be executed. Route[i] corresponds to the best route for rebalancing token[i]
      */
-    function rebalance(uint8[10] calldata newWeights, Route[10][] calldata routes) public payable onlyTreasury nonReentrant {
-        if (!validWeights(newWeights)) {
-            revert InvalidWeights();
+    function rebalance(Token[10] calldata _newTokens, Route[10][] calldata routes) public payable onlyTreasury nonReentrant {
+        if (!checkTokenList(_newTokens)) {
+            revert InvalidTokenList();
         }
 
         // deviations correspond to the difference between the expected new amount of each token and the actual amount
@@ -257,10 +258,9 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         // perform swaps 
         for (uint8 i; i < 10; i++) {
             // if the weight is the same, or no routes provided - no need to swap
-            if (newWeights[i] == constituentTokens[i].weight || routes[i][0].tokenIn == address(0)) {
+            if (_newTokens[i].weight == constituentTokens[i].weight || routes[i][0].tokenIn == address(0)) {
                 continue;
             }
-            Token memory token = constituentTokens[i];
 
             // perform swap
             for (uint8 j; j < routes[i].length; j++) {
@@ -270,7 +270,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
                 // get routes for the swap
                 Route calldata route = routes[i][j];
-                IERC20(token.tokenAddress).approve(address(i_swapRouter), route.amountIn);
+                IERC20(route.tokenIn).approve(address(i_swapRouter), route.amountIn);
                 
                 // Execute swap.
                 executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
@@ -278,20 +278,15 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         }
 
         // get ethereum amount of each token in the vault (aumPerToken) and total ethereum amount in the vault (totalAUM)
+        constituentTokens = _newTokens;
         (uint256[10] memory aumPerToken, uint256 totalAUM) = aumBreakdown();
         
         // find deviations from the expected amount in the vault of each token
         // since routes could be calculated in a block with different prices, we need to check if the deviations are not too big
         for (uint8 i; i < 10; i++) {
-            // skip if the weight is the same
-            // if (newWeights[i] == constituentTokens[i].weight) {
-            //     deviations[i] = 0;
-            //     continue;
-            // }
-
             // calculate deviations
             uint256 tokenValueInEth = aumPerToken[i]; // get price of token in ETH
-            uint256 expectedTokenValueInEth = (totalAUM * newWeights[i]) / 100; // get expected value of token in ETH in the contract after rebalancing
+            uint256 expectedTokenValueInEth = (totalAUM * _newTokens[i].weight) / 100; // get expected value of token in ETH in the contract after rebalancing
 
             // calculate deviation of actual token value from expected token value in ETH
             deviations[i] = int256(expectedTokenValueInEth) - int256(tokenValueInEth);
@@ -307,6 +302,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         for (uint8 i; i < 10; i++) {
             address tokenAddress = constituentTokens[i].tokenAddress;
             int256 deviation = deviations[i];
+            
             if (deviation > 0) { // -> need to buy more of this token (amount < expected)
                 // absolute value of deviation
                 uint256 uDeviation = uint256(deviation);
@@ -322,7 +318,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                 // absolute value of deviation
                 uint256 uDeviation = uint256(-deviation);
 
-                uint256 tokenValueInEth = aumPerToken[i];
+                uint256 tokenValueInEth = getLatestPriceInEthOf(i);
                 uint256 deviationToSellInToken = uDeviation * 10 ** ERC20(tokenAddress).decimals() / tokenValueInEth;
 
                 IERC20(tokenAddress).approve(address(i_swapRouter), deviationToSellInToken);
@@ -332,7 +328,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
         // update weights
         for (uint8 i; i < 10; i++) {
-            constituentTokens[i].weight = newWeights[i];
+            constituentTokens[i].weight = _newTokens[i].weight;
         }
 
         // send remaining amountToDeviationCorrection back to treasury
@@ -340,62 +336,9 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             i_continuumTreasury.transfer(amountForDeviationCorrection);
         }
 
-        emit Rebalanced(newWeights);
+        emit Rebalanced(_newTokens);
     }
     
-    /**
-     * @notice Changes the tokens and their allocations in the vault.
-     * @dev Assumption: if the token remains in the vault, it should be on the same index in _newTokens as currently stored in constituentTokens
-     * @param _newTokens The new set of tokens and their allocations for the vault.
-     */
-    function reconstitute(
-        Token[10] calldata _newTokens, 
-        uint8[10] calldata _newIndices
-    ) public payable onlyTreasury {
-        if (!checkTokenList(_newTokens)) {
-            revert InvalidTokenList();
-        }
-        
-        for (uint8 i; i < 10; i++) {
-            address predecessorAddress = constituentTokens[i].tokenAddress;
-            address newTokenAddress = _newTokens[_newIndices[i]].tokenAddress;
-
-            // swap all predecessorAddress tokens for newTokenAddress
-        }
-    }
-
-    /**
-     * @notice Reconstitutes the vault's portfolio with a new set of tokens.
-     * @dev TODO: remove
-     * @param _newTokens The new set of tokens and their allocations for the vault.
-     */
-    function naiveReconstitution(Token[10] calldata _newTokens) public onlyTreasury {
-        if (!checkTokenList(_newTokens)) {
-            revert InvalidTokenList();
-        }
-
-        address wEthAddress = address(i_wEthToken);
-        // Swap all tokens (except rETH) for wETH
-        for (uint8 i = 1; i < 10; i++) {
-            Token memory token = constituentTokens[i];
-            uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
-            IERC20(token.tokenAddress).approve(address(i_swapRouter), tokenBalance);
-            executeUniswapSwap(token.tokenAddress, wEthAddress, tokenBalance, 0);
-        }
-
-        // Get wETH balance of the vault
-        uint256 wethBalance = IERC20(wEthAddress).balanceOf(address(this));
-        // Approve the swap router to use the wETH to swap
-        IWETH(wEthAddress).approve(address(i_swapRouter), wethBalance);
-
-        // Swap wETH for the new tokens and their corresponding weights
-        for (uint8 i = 1; i < 10; i++) {
-            Token memory token = _newTokens[i];
-            uint256 amountToSwap = (wethBalance * token.weight) / 100;
-            executeUniswapSwap(wEthAddress, token.tokenAddress, amountToSwap, 0);
-        }
-    }
-
     /**
      * @notice Allows the contract to receive ETH directly.
      */
@@ -611,10 +554,15 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             address tokenAddress = constituentTokens[i].tokenAddress;
             uint256 tokenPrice = getLatestPriceInEthOf(i);
             uint256 tokenBalance = IERC20(tokenAddress).balanceOf(address(this));
+
             aumPerToken[i] = (tokenBalance * tokenPrice) / (10 ** ERC20(tokenAddress).decimals());
             totalAum += aumPerToken[i];
         }
 
         return (aumPerToken, totalAum);
+    }
+
+    function abs(int x) private pure returns (int) {
+        return x >= 0 ? x : -x;
     }
 }

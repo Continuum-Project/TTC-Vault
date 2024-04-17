@@ -163,29 +163,6 @@ contract VaultTest is TtcTestContext {
    
     }
 
-    function testNaiveReconstitution() public {
-        address treasury = makeAddr("treasury");
-        testInitialMint();
-
-        TokenBalance[10] memory initialBalances = getVaultBalances();
-
-        setUpNewTokens();
-
-        vm.startPrank(treasury);
-        vault.naiveReconstitution(tokens);
-        vm.stopPrank();
-
-        TokenBalance[10] memory newBalances = getVaultBalances();
-
-        for (uint8 i; i < 10; i++) {
-            if (i == 0) {
-                assertEq(initialBalances[i].balance, newBalances[i].balance);
-            } else {
-                assertFalse(initialBalances[i].balance == newBalances[i].balance);
-            }
-        }
-    }
-
     function testGetLatestPriceInEthOf() view public {
         // rETH
         uint256 price = vault.getLatestPriceInEthOf(0);
@@ -247,11 +224,17 @@ contract VaultTest is TtcTestContext {
         vm.deal(treasury, 10000 ether);
 
         Route[10][] memory routes = new Route[10][](10);
-        routes[0][0] = Route(RETH_ADDRESS, WETH_ADDRESS, 100000, 100000);
+        routes[1][0] = Route(MKR_ADDRESS, WETH_ADDRESS, 0.25 ether, 0 ether);
+        routes[1][1] = Route(WETH_ADDRESS, SHIB_ADDRESS, 0.2 ether, 0 ether);
+
+        Token[10] memory testTokens = tokens;
+        testTokens[1].weight = 10;
+        testTokens[9].weight = 5;
+
         // basic rebalance between two tokens
         // SUT: rETH, SHIB
         vm.startPrank(treasury);
-        vault.rebalance{value: 10000 ether}([45, 10, 5, 5, 5, 5, 5, 5, 5, 10], routes);
+        vault.rebalance{value: 10000 ether}(testTokens, routes);
         vm.stopPrank();
 
         TokenBalance[10] memory balances = getVaultBalances();
