@@ -246,7 +246,10 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @param _newTokens The new weights for the tokens in the vault.
      * @param routes The routes for the swaps to be executed. Route[i] corresponds to the best route for rebalancing token[i]
      */
-    function rebalance(Token[10] calldata _newTokens, Route[10][] calldata routes) public payable onlyTreasury nonReentrant {
+    function rebalance(
+        Token[10] calldata _newTokens, 
+        Route[10][] calldata routes
+    ) public payable onlyTreasury nonReentrant {
         if (!checkTokenList(_newTokens)) {
             revert InvalidTokenList();
         }
@@ -316,7 +319,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                 executeUniswapSwap(address(i_wEthToken), tokenAddress, uDeviation, 0);
             } else if (deviation < 0) { // need to sell a token (amount > expected)
                 // absolute value of deviation
-                uint256 uDeviation = uint256(-deviation);
+                uint256 uDeviation = abs(deviation);
 
                 uint256 tokenValueInEth = getLatestPriceInEthOf(i);
                 uint256 deviationToSellInToken = uDeviation * 10 ** ERC20(tokenAddress).decimals() / tokenValueInEth;
@@ -562,7 +565,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         return (aumPerToken, totalAum);
     }
 
-    function abs(int x) private pure returns (int) {
-        return x >= 0 ? x : -x;
+    function abs(int x) private pure returns (uint) {
+        return x >= 0 ? uint(x) : uint(-x);
     }
 }
