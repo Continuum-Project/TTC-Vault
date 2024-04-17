@@ -565,6 +565,11 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         return (aumPerToken, totalAum);
     }
 
+    /**
+     * @notice Absolute Value
+     * @param x The number to get the absolute value of
+     * @return The absolute value of x
+     */
     function abs(int x) private pure returns (uint) {
         return x >= 0 ? uint(x) : uint(-x);
     }
