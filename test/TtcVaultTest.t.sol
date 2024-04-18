@@ -221,7 +221,8 @@ contract VaultTest is TtcTestContext {
         testInitialMint();
 
         address treasury = makeAddr("treasury");
-        vm.deal(treasury, 10000 ether);
+        uint96 weiAmount = 10000 ether;
+        vm.deal(treasury, weiAmount);
 
         Route[10][] memory routes = new Route[10][](10);
         routes[1][0] = Route(MKR_ADDRESS, WETH_ADDRESS, 0.25 ether, 0 ether);
@@ -234,7 +235,11 @@ contract VaultTest is TtcTestContext {
         // basic rebalance between two tokens
         // SUT: rETH, SHIB
         vm.startPrank(treasury);
-        vault.rebalance{value: 10000 ether}(testTokens, routes);
+        uint256 amountEthToREth = (weiAmount * tokens[0].weight) / 100;
+        (uint[2] memory portions,) = calculateOptimalREthRoute(
+            amountEthToREth
+        );
+        vault.rebalance{value: weiAmount}(testTokens, routes, portions);
         vm.stopPrank();
 
         TokenBalance[10] memory balances = getVaultBalances();

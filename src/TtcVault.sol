@@ -245,10 +245,12 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @dev If routes are slightly outdated, the deviations are corrected by buying/selling the tokens using ETH as a proxy.
      * @param _newTokens The new weights for the tokens in the vault.
      * @param routes The routes for the swaps to be executed. Route[i] corresponds to the best route for rebalancing token[i]
+     * @param _rocketSwapPortions amount of rETH to swap for ETH using uniswap and balancer are portions[0] and portions[1] respectively
      */
     function rebalance(
         Token[10] calldata _newTokens, 
-        Route[10][] calldata routes
+        Route[10][] calldata routes,
+        uint256[2] calldata _rocketSwapPortions
     ) public payable onlyTreasury nonReentrant {
         if (!checkTokenList(_newTokens)) {
             revert InvalidTokenList();
@@ -257,9 +259,26 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         // deviations correspond to the difference between the expected new amount of each token and the actual amount
         // not percentages, concrete values
         int256[10] memory deviations;
+        
+        // for rETH, use balancer and uniswap with predetermined weights to swap
+        // assumption: route[0] is a single route for rETH (since there is no need to use some proxy token between rETH/ETH)
+        Route calldata rEthRoute = routes[0][0];
+        if (rEthRoute.tokenIn != address(0)) { // if the route is not specified, no swap is required
+            if (rEthRoute.tokenIn == address(i_rEthToken)) {
+                // get ETH for rETH
+                uint256 rEthAmountForEth = rEthRoute.amountIn;
+                executeRocketSwapFrom(rEthAmountForEth, _rocketSwapPortions[0], _rocketSwapPortions[1], rEthRoute.amountOutMinimum);
+            } else if (rEthRoute.tokenOut == address(i_rEthToken)) {
+                // get rETH for ETH
+                uint256 ethAmountForREth = rEthRoute.amountIn;
+                executeRocketSwapTo(ethAmountForREth, _rocketSwapPortions[0], _rocketSwapPortions[1], rEthRoute.amountOutMinimum);
+            } else {
+                revert InvalidRoute();
+            }
+        }
 
-        // perform swaps 
-        for (uint8 i; i < 10; i++) {
+        // perform swaps for other tokens
+        for (uint8 i = 1; i < 10; i++) {
             // if the weight is the same, or no routes provided - no need to swap
             if (_newTokens[i].weight == constituentTokens[i].weight || routes[i][0].tokenIn == address(0)) {
                 continue;
