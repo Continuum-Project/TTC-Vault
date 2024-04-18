@@ -506,6 +506,11 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         address tokenAddress = constituentTokens[constituentTokenIndex].tokenAddress;
         address wEthAddress = address(i_wEthToken);
 
+        // if token is rETH (0 index), use native contract for better price accuracy
+        if (constituentTokenIndex == 0) {
+            return i_rEthToken.getEthValue(1e18);
+        }
+
         // get a token/wETH pool's address
         
         // payload to get a pool address
