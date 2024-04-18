@@ -33,11 +33,11 @@ interface ITtcVault {
 
     // Methods
     /// @notice mint tokens for msg.value to msg.sender
-    function mint(uint256[2] memory _rocketSwapPortions) external payable;
+    function mint() external payable;
 
     /// @notice Return constituents to msg.sender and burn
-    function redeem(uint256 _ttcAmount, uint256[2] memory _rocketSwapPortions) external;
+    function redeem(uint256 _ttcAmount) external;
     
     /// @notice Rebalance the vault
-    function rebalance(Token[10] calldata _newTokens, Route[10][] calldata routes, uint256[2] calldata _rocketSwapPortions) external payable;
+    function rebalance(Token[10] calldata _newTokens, Route[10][] calldata routes) external payable;
 }

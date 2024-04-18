@@ -49,11 +49,7 @@ contract VaultTest is TtcTestContext {
  
 
         vm.startPrank(user);
-        uint256 amountEthToREth = (weiAmount * tokens[0].weight) / 100;
-        (uint[2] memory portions, ) = calculateOptimalREthRoute(
-            amountEthToREth
-        );
-        vault.mint{value: weiAmount}(portions);
+        vault.mint{value: weiAmount}();
         vm.stopPrank();
 
        
@@ -80,11 +76,7 @@ contract VaultTest is TtcTestContext {
 
         vm.startPrank(user);
         uint256 ttcBalance = (vault.i_ttcToken()).balanceOf(user);
-        uint256 amountREthToEth = ((vault.i_rEthToken()).balanceOf(address(vault)) * ttcBalance) / (vault.i_ttcToken()).totalSupply();
-        (uint[2] memory portions,) = calculateOptimalEthRoute(
-            amountREthToEth
-        );
-        vault.redeem(ttcBalance, portions);
+        vault.redeem(ttcBalance);
         vm.stopPrank();
 
         assertEq(
@@ -118,11 +110,7 @@ contract VaultTest is TtcTestContext {
         }
       
         vm.startPrank(user);
-        uint256 amountEthToREth = (weiAmount * tokens[0].weight) / 100;
-        (uint[2] memory portions,) = calculateOptimalREthRoute(
-            amountEthToREth
-        );
-        vault.mint{value: weiAmount}(portions);
+        vault.mint{value: weiAmount}();
 
         assertEq(
             IERC20(vault.getTtcTokenAddress()).balanceOf(user),
@@ -141,9 +129,7 @@ contract VaultTest is TtcTestContext {
        
         weiAmount = 5 ether;
         vm.deal(user, weiAmount);
-        amountEthToREth = (weiAmount * tokens[0].weight) / 100;
-        (portions,) = calculateOptimalREthRoute(amountEthToREth);
-        vault.mint{value: weiAmount}(portions);
+        vault.mint{value: weiAmount}();
         vm.stopPrank();
 
         assertGt(
@@ -235,11 +221,7 @@ contract VaultTest is TtcTestContext {
         // basic rebalance between two tokens
         // SUT: rETH, SHIB
         vm.startPrank(treasury);
-        uint256 amountEthToREth = (weiAmount * tokens[0].weight) / 100;
-        (uint[2] memory portions,) = calculateOptimalREthRoute(
-            amountEthToREth
-        );
-        vault.rebalance{value: weiAmount}(testTokens, routes, portions);
+        vault.rebalance{value: weiAmount}(testTokens, routes);
         vm.stopPrank();
 
         TokenBalance[10] memory balances = getVaultBalances();
