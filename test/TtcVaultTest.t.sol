@@ -49,11 +49,7 @@ contract VaultTest is TtcTestContext {
  
 
         vm.startPrank(user);
-        uint256 amountEthToREth = (weiAmount * tokens[0].weight) / 100;
-        (uint[2] memory portions, ) = calculateOptimalREthRoute(
-            amountEthToREth
-        );
-        vault.mint{value: weiAmount}(portions);
+        vault.mint{value: weiAmount}();
         vm.stopPrank();
 
        
@@ -80,11 +76,7 @@ contract VaultTest is TtcTestContext {
 
         vm.startPrank(user);
         uint256 ttcBalance = (vault.i_ttcToken()).balanceOf(user);
-        uint256 amountREthToEth = ((vault.i_rEthToken()).balanceOf(address(vault)) * ttcBalance) / (vault.i_ttcToken()).totalSupply();
-        (uint[2] memory portions,) = calculateOptimalEthRoute(
-            amountREthToEth
-        );
-        vault.redeem(ttcBalance, portions);
+        vault.redeem(ttcBalance);
         vm.stopPrank();
 
         assertEq(
@@ -118,11 +110,7 @@ contract VaultTest is TtcTestContext {
         }
       
         vm.startPrank(user);
-        uint256 amountEthToREth = (weiAmount * tokens[0].weight) / 100;
-        (uint[2] memory portions,) = calculateOptimalREthRoute(
-            amountEthToREth
-        );
-        vault.mint{value: weiAmount}(portions);
+        vault.mint{value: weiAmount}();
 
         assertEq(
             IERC20(vault.getTtcTokenAddress()).balanceOf(user),
@@ -141,9 +129,7 @@ contract VaultTest is TtcTestContext {
        
         weiAmount = 5 ether;
         vm.deal(user, weiAmount);
-        amountEthToREth = (weiAmount * tokens[0].weight) / 100;
-        (portions,) = calculateOptimalREthRoute(amountEthToREth);
-        vault.mint{value: weiAmount}(portions);
+        vault.mint{value: weiAmount}();
         vm.stopPrank();
 
         assertGt(
@@ -221,7 +207,8 @@ contract VaultTest is TtcTestContext {
         testInitialMint();
 
         address treasury = makeAddr("treasury");
-        vm.deal(treasury, 10000 ether);
+        uint96 weiAmount = 10000 ether;
+        vm.deal(treasury, weiAmount);
 
         Route[10][] memory routes = new Route[10][](10);
         routes[1][0] = Route(MKR_ADDRESS, WETH_ADDRESS, 0.25 ether, 0 ether);
@@ -234,7 +221,7 @@ contract VaultTest is TtcTestContext {
         // basic rebalance between two tokens
         // SUT: rETH, SHIB
         vm.startPrank(treasury);
-        vault.rebalance{value: 10000 ether}(testTokens, routes);
+        vault.rebalance{value: weiAmount}(testTokens, routes);
         vm.stopPrank();
 
         TokenBalance[10] memory balances = getVaultBalances();

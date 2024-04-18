@@ -54,6 +54,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     // Amount of ETH allocated into rEth so far (after swap fees)
     uint256 private ethAllocationREth;
     uint8 private constant ETH_DECIMALS = 18;
+    uint8 private constant UNISWAP_ROCKET_PORTION = 0;
+    uint8 private constant BALANCER_ROCKET_PORTION = 10;
 
     // Flag to check for reentrancy
     bool private locked;
@@ -110,9 +112,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     /**
      * @notice Mints TTC tokens in exchange for ETH sent to the contract.
      * @notice The amount of TTC minted is based on the amount of ETH sent, the pre-mint valuation of the vault's assets in ETH, and the pre-mint total supply of TTC.
-     * @param _rocketSwapPortions amount of ETH to swap for rETH using uniswap and balancer are portions[0] and portions[1] respectively
      */
-    function mint(uint256[2] calldata _rocketSwapPortions) public payable {
+    function mint() public payable {
         if (msg.value < 0.01 ether) {
             revert MinimumAmountToMint();
         }
@@ -127,12 +128,12 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         uint256 minREthAmountOut = (ethValueInREth * (10000 - MAX_ROCKET_SWAP_PRICE_IMPACT)) / 10000;
         // Execute the rocket swap
         uint256 initialREthBalance = i_rEthToken.balanceOf(address(this));
-        executeRocketSwapTo(ethAmountForREth, _rocketSwapPortions[0], _rocketSwapPortions[1], minREthAmountOut);
+        executeRocketSwapTo(ethAmountForREth, minREthAmountOut);
         uint256 resultingREthBalance = i_rEthToken.balanceOf(address(this));
         // Get the pre-swap value of rETH (in ETH) in the vault based on the swap price
         aum += ((initialREthBalance * ethAmountForREth) / (resultingREthBalance - initialREthBalance));
         ethMintAmountAfterFees += (
-            ethAmountForREth - calculateRocketSwapFee(ethAmountForREth, _rocketSwapPortions[0], _rocketSwapPortions[1])
+            ethAmountForREth - calculateRocketSwapFee(ethAmountForREth, UNISWAP_ROCKET_PORTION, BALANCER_ROCKET_PORTION)
         );
         ethAllocationREth += ethMintAmountAfterFees;
 
@@ -187,9 +188,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     /**
      * @notice Redeems TTC tokens for a proportional share of the vault's assets.
      * @param _ttcAmount The amount of TTC tokens to redeem.
-     * @param _rocketSwapPortions amount of rETH to swap for ETH using uniswap and balancer are portions[0] and portions[1] respectively
      */
-    function redeem(uint256 _ttcAmount, uint256[2] calldata _rocketSwapPortions) public nonReentrant {
+    function redeem(uint256 _ttcAmount) public nonReentrant {
         uint256 totalSupplyTtc = i_ttcToken.totalSupply();
         // Check if vault is empty
         if (totalSupplyTtc == 0) {
@@ -205,9 +205,9 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         uint256 rEthValueInEth = i_rEthToken.getEthValue(rEthRedemptionAmount);
         uint256 minAmountOut = (rEthValueInEth * (10000 - MAX_ROCKET_SWAP_PRICE_IMPACT)) / 10000;
         uint256 ethAllocationAmountPostSwap = ((ethAllocationREth * _ttcAmount) / totalSupplyTtc)
-            - calculateRocketSwapFee(rEthRedemptionAmount, _rocketSwapPortions[0], _rocketSwapPortions[1]);
+            - calculateRocketSwapFee(rEthRedemptionAmount, UNISWAP_ROCKET_PORTION, BALANCER_ROCKET_PORTION);
         uint256 initialEthBalance = address(this).balance;
-        executeRocketSwapFrom(rEthRedemptionAmount, _rocketSwapPortions[0], _rocketSwapPortions[1], minAmountOut);
+        executeRocketSwapFrom(rEthRedemptionAmount, minAmountOut);
         uint256 resultingEthBalance = address(this).balance;
 
         uint256 ethChange = resultingEthBalance - initialEthBalance;
@@ -257,9 +257,26 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         // deviations correspond to the difference between the expected new amount of each token and the actual amount
         // not percentages, concrete values
         int256[10] memory deviations;
+        
+        // for rETH, use balancer and uniswap with predetermined weights to swap
+        // assumption: route[0] is a single route for rETH (since there is no need to use some proxy token between rETH/ETH)
+        Route calldata rEthRoute = routes[0][0];
+        if (rEthRoute.tokenIn != address(0)) { // if the route is not specified, no swap is required
+            if (rEthRoute.tokenIn == address(i_rEthToken)) {
+                // get ETH for rETH
+                uint256 rEthAmountForEth = rEthRoute.amountIn;
+                executeRocketSwapFrom(rEthAmountForEth, rEthRoute.amountOutMinimum);
+            } else if (rEthRoute.tokenOut == address(i_rEthToken)) {
+                // get rETH for ETH
+                uint256 ethAmountForREth = rEthRoute.amountIn;
+                executeRocketSwapTo(ethAmountForREth, rEthRoute.amountOutMinimum);
+            } else {
+                revert InvalidRoute();
+            }
+        }
 
-        // perform swaps 
-        for (uint8 i; i < 10; i++) {
+        // perform swaps for other tokens
+        for (uint8 i = 1; i < 10; i++) {
             // if the weight is the same, or no routes provided - no need to swap
             if (_newTokens[i].weight == constituentTokens[i].weight || routes[i][0].tokenIn == address(0)) {
                 continue;
@@ -385,40 +402,32 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     /**
      * @notice Execute ETH->rETH swap using rocket swap router
      * @param _amountEthToSwap The amount of ETH to swap
-     * @param _uniswapPortion Portion to swap using uniswap
-     * @param _balancerPortion Portion to swap using balancer
      * @param _minREthAmountOut Minimum amount of RETH to receive
      */
     function executeRocketSwapTo(
         uint256 _amountEthToSwap,
-        uint256 _uniswapPortion,
-        uint256 _balancerPortion,
         uint256 _minREthAmountOut
     ) internal {
         // Swap rETH for ETH using provided route
         i_rocketSwapRouter.swapTo{value: _amountEthToSwap}(
-            _uniswapPortion, _balancerPortion, _minREthAmountOut, _minREthAmountOut
+            UNISWAP_ROCKET_PORTION, BALANCER_ROCKET_PORTION, _minREthAmountOut, _minREthAmountOut
         );
     }
 
     /**
      * @notice Execute rETH->ETH swap using rocket swap router
      * @param _amountREthToSwap The amount of ETH to swap
-     * @param _uniswapPortion Portion to swap using uniswap
-     * @param _balancerPortion Portion to swap using balancer
      * @param _minREthAmountOut Minimum amount of RETH to receive
      */
     function executeRocketSwapFrom(
         uint256 _amountREthToSwap,
-        uint256 _uniswapPortion,
-        uint256 _balancerPortion,
         uint256 _minREthAmountOut
     ) internal {
         // Approve rocket swap router to spend the tokens
         i_rEthToken.approve(address(i_rocketSwapRouter), _amountREthToSwap);
         // Swap rETH for ETH using provided route
         i_rocketSwapRouter.swapFrom(
-            _uniswapPortion, _balancerPortion, _minREthAmountOut, _minREthAmountOut, _amountREthToSwap
+            UNISWAP_ROCKET_PORTION, BALANCER_ROCKET_PORTION, _minREthAmountOut, _minREthAmountOut, _amountREthToSwap
         );
     }
 
