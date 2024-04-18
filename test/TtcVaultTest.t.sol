@@ -210,13 +210,13 @@ contract VaultTest is TtcTestContext {
         uint96 weiAmount = 10000 ether;
         vm.deal(treasury, weiAmount);
 
-        Route[10][] memory routes = new Route[10][](10);
-        routes[1][0] = Route(MKR_ADDRESS, WETH_ADDRESS, 0.25 ether, 0 ether);
-        routes[1][1] = Route(WETH_ADDRESS, SHIB_ADDRESS, 0.2 ether, 0 ether);
-
         Token[10] memory testTokens = tokens;
         testTokens[1].weight = 10;
         testTokens[9].weight = 5;
+
+        Route[10][] memory routes = new Route[10][](10);
+        routes[1][0] = Route(MKR_ADDRESS, WETH_ADDRESS, 0.25 ether, 0 ether);
+        routes[1][1] = Route(WETH_ADDRESS, SHIB_ADDRESS, 0.2 ether, 0 ether);
 
         // basic rebalance between two tokens
         // SUT: rETH, SHIB
@@ -232,5 +232,85 @@ contract VaultTest is TtcTestContext {
                 "Post-rebalance vault balances should be greater than 0"
             );
         }
+    }
+
+    function testRebalanceMultiple() public {
+        testInitialMint();
+
+        // SUT: MKR, SHIB, wBTC
+        Token[10] memory testTokens = tokens;
+        testTokens[4].weight = 3; // wBTC
+        testTokens[9].weight = 7; // MKR
+        testTokens[1].weight = 10; // SHIB
+
+
+        Route[10][] memory routes = new Route[10][](10);
+
+        // calculate MKR -> SHIB route (3%)
+        Route[] memory mkrToShib = new Route[](2);
+
+        uint256 mkrIn = xPercentFromBalance(33, MKR_ADDRESS); // 33% of MKR balance
+        uint256 intermediate = withSlippage5p(tokensToEthPrice(mkrIn, 9));
+        mkrToShib[0] = Route(MKR_ADDRESS, WETH_ADDRESS, mkrIn, intermediate);
+        mkrToShib[1] = Route(WETH_ADDRESS, SHIB_ADDRESS, intermediate, 0 ether);
+
+        routes[9][0] = mkrToShib[0];
+        routes[9][1] = mkrToShib[1];
+
+        // calculate wBTC -> SHIB route (2%)
+        Route[] memory wbtcToShib = new Route[](2);
+
+        uint256 wbtcIn = xPercentFromBalance(20, WBTC_ADDRESS); // 20% of wBTC balance
+        intermediate = withSlippage5p(tokensToEthPrice(wbtcIn, 4));
+        wbtcToShib[0] = Route(WBTC_ADDRESS, WETH_ADDRESS, wbtcIn, intermediate);
+        wbtcToShib[1] = Route(WETH_ADDRESS, SHIB_ADDRESS, intermediate, 0 ether);
+
+        routes[4][0] = wbtcToShib[0];
+        routes[4][1] = wbtcToShib[1];
+
+        // basic rebalance between three tokens
+        // SUT: MKR, SHIB, wBTC
+
+        address treasury = makeAddr("treasury");
+        uint96 weiAmount = 10000 ether;
+        vm.deal(treasury, weiAmount);
+
+        vm.startPrank(treasury);
+        vault.rebalance{value: weiAmount}(testTokens, routes);
+        vm.stopPrank();
+
+        TokenBalance[10] memory balances = getVaultBalances();
+        for (uint8 i; i < 10; i++) {
+            assertGt(
+                balances[i].balance,
+                0,
+                "Post-rebalance vault balances should be greater than 0"
+            );
+        }
+
+    }
+
+    // Returns the amount of tokens that is x% of the balance of the vault
+    function xPercentFromBalance(uint8 percent, address tokenAddress)
+        private
+        view
+        returns (uint256)
+    {
+        return (percent * IERC20(tokenAddress).balanceOf(address(vault))) / 100;
+    }
+
+    // Returns the amount of eth that is equivalent to the amount of tokens
+    function tokensToEthPrice(uint256 amount, uint8 tokenIndex)
+        private
+        view
+        returns (uint256)
+    {   
+        uint256 tokenDecimals = ERC20(tokens[tokenIndex].tokenAddress).decimals();
+        return (amount * vault.getLatestPriceInEthOf(tokenIndex)) / (10**tokenDecimals);
+    }
+
+    // Returns the amount with 3% slippage applied
+    function withSlippage5p(uint256 amount) public pure returns (uint256) {
+        return (amount * 95) / 100;
     }
 }
