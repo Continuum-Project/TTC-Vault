@@ -301,7 +301,7 @@ contract VaultTest is TtcTestContext {
 
         Route[] memory mkrToCronos = new Route[](2);
 
-        uint256 mkrIn = xPercentFromBalance(100, MKR_ADDRESS); // 33% of MKR balance
+        uint256 mkrIn = xPercentFromBalance(100, MKR_ADDRESS); // 100% of MKR balance
         uint256 intermediate = withSlippage5p(tokensToEthPrice(mkrIn, 9));
         mkrToCronos[0] = Route(MKR_ADDRESS, WETH_ADDRESS, mkrIn, intermediate);
         mkrToCronos[1] = Route(WETH_ADDRESS, CRONOS_ADDRESS, intermediate, 0 ether);
@@ -311,6 +311,61 @@ contract VaultTest is TtcTestContext {
 
         // basic reconstitution between two tokens
         // SUT: MKR, CRONOS
+        address treasury = makeAddr("treasury");
+
+        uint96 weiAmount = 10000 ether;
+        vm.deal(treasury, weiAmount);
+
+        vm.startPrank(treasury);
+        vault.rebalance{value: weiAmount}(testTokens, routes);
+        vm.stopPrank();
+
+        TokenBalance[10] memory balances = getVaultBalances();
+        for (uint8 i; i < 10; i++) {
+            assertGt(
+                balances[i].balance,
+                0,
+                "Post-rebalance vault balances should be greater than 0"
+            );
+        }
+    }
+
+    // MKR -> CRONOS
+    // MANTLE -> AAVE
+    function testRebalance_ReconstitutionMultiple() public {
+        testInitialMint();
+
+        // SUT: change MKR to CRONOS, MANTLE to AAVE
+        Token[10] memory testTokens = tokens;
+        testTokens[9].tokenAddress = CRONOS_ADDRESS;
+        testTokens[8].tokenAddress = AAVE_ADDRESS;
+
+        Route[10][] memory routes = new Route[10][](10);
+
+        // calculate MKR -> CRONOS route (100%)
+        Route[] memory mkrToCronos = new Route[](2);
+
+        uint256 mkrIn = xPercentFromBalance(100, MKR_ADDRESS); // 100% of MKR balance
+        uint256 intermediate = withSlippage5p(tokensToEthPrice(mkrIn, 9));
+        mkrToCronos[0] = Route(MKR_ADDRESS, WETH_ADDRESS, mkrIn, intermediate);
+        mkrToCronos[1] = Route(WETH_ADDRESS, CRONOS_ADDRESS, intermediate, 0 ether);
+
+        routes[9][0] = mkrToCronos[0];
+        routes[9][1] = mkrToCronos[1];
+
+        // calculate MANTLE -> AAVE route (100%)
+        Route[] memory mantleToAave = new Route[](2);
+
+        uint256 mantleIn = xPercentFromBalance(100, MANTLE_ADDRESS); // 100% of MANTLE balance
+        intermediate = withSlippage5p(tokensToEthPrice(mantleIn, 8));
+        mantleToAave[0] = Route(MANTLE_ADDRESS, WETH_ADDRESS, mantleIn, intermediate);
+        mantleToAave[1] = Route(WETH_ADDRESS, AAVE_ADDRESS, intermediate, 0 ether);
+
+        routes[8][0] = mantleToAave[0];
+        routes[8][1] = mantleToAave[1];
+
+        // basic reconstitution between two tokens
+        // SUT: MKR, CRONOS, MANTLE, AAVE
         address treasury = makeAddr("treasury");
 
         uint96 weiAmount = 10000 ether;
