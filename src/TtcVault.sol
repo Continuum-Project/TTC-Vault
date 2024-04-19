@@ -49,7 +49,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     IrETH public immutable i_rEthToken;
 
     // Current tokens and their alloGcations in the vault
-    Token[10] constituentTokens;
+    Token[10] public constituentTokens;
 
     // Amount of ETH allocated into rEth so far (after swap fees)
     uint256 private ethAllocationREth;

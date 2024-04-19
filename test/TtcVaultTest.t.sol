@@ -328,6 +328,19 @@ contract VaultTest is TtcTestContext {
                 "Post-rebalance vault balances should be greater than 0"
             );
         }
+
+        // assert that CRONOS was added to the vault
+        Token[10] memory newTokens;
+        for (uint8 i = 0; i < 10; i++) {
+            (uint8 tokenIndex, address tokenAddress) = vault.constituentTokens(i);
+            newTokens[i] = Token(tokenIndex, tokenAddress);
+        }
+
+        assertEq(
+            newTokens[9].tokenAddress,
+            CRONOS_ADDRESS,
+            "CRONOS should be in the vault"
+        );
     }
 
     // MKR -> CRONOS
@@ -383,6 +396,24 @@ contract VaultTest is TtcTestContext {
                 "Post-rebalance vault balances should be greater than 0"
             );
         }
+
+        // assert that the new tokens are in the vault
+        Token[10] memory newTokens;
+        for (uint8 i = 0; i < 10; i++) {
+            (uint8 tokenIndex, address tokenAddress) = vault.constituentTokens(i);
+            newTokens[i] = Token(tokenIndex, tokenAddress);
+        }
+
+        assertEq(
+            newTokens[8].tokenAddress,
+            AAVE_ADDRESS,
+            "AAVE should be in the vault"
+        );
+        assertEq(
+            newTokens[9].tokenAddress,
+            CRONOS_ADDRESS,
+            "CRONOS should be in the vault"
+        );
     }
 
     // Returns the amount of tokens that is x% of the balance of the vault
