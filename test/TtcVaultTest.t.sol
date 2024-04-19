@@ -203,7 +203,7 @@ contract VaultTest is TtcTestContext {
     // MANTLE: 5
     // MKR: 10
 
-    function testRebalance() public {
+    function testRebalance_PairRebalance() public {
         testInitialMint();
 
         address treasury = makeAddr("treasury");
@@ -234,7 +234,7 @@ contract VaultTest is TtcTestContext {
         }
     }
 
-    function testRebalanceMultiple() public {
+    function testRebalance_MultipleRebalance() public {
         testInitialMint();
 
         // SUT: MKR, SHIB, wBTC
@@ -345,7 +345,7 @@ contract VaultTest is TtcTestContext {
 
     // MKR -> CRONOS
     // MANTLE -> AAVE
-    function testRebalance_ReconstitutionMultiple() public {
+    function testRebalance_MultipleReconstitution() public {
         testInitialMint();
 
         // SUT: change MKR to CRONOS, MANTLE to AAVE
