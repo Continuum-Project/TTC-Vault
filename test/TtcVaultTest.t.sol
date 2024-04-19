@@ -291,7 +291,43 @@ contract VaultTest is TtcTestContext {
 
     // this function does not change the weights, but adds a new token in place of the old one
     function testRebalance_PairReconstitution() public {
+        testInitialMint();
 
+        // SUT: change MKR to CRONOS
+        Token[10] memory testTokens = tokens;
+        testTokens[9].tokenAddress = CRONOS_ADDRESS;
+
+        Route[10][] memory routes = new Route[10][](10);
+
+        Route[] memory mkrToCronos = new Route[](2);
+
+        uint256 mkrIn = xPercentFromBalance(100, MKR_ADDRESS); // 33% of MKR balance
+        uint256 intermediate = withSlippage5p(tokensToEthPrice(mkrIn, 9));
+        mkrToCronos[0] = Route(MKR_ADDRESS, WETH_ADDRESS, mkrIn, intermediate);
+        mkrToCronos[1] = Route(WETH_ADDRESS, CRONOS_ADDRESS, intermediate, 0 ether);
+
+        routes[9][0] = mkrToCronos[0];
+        routes[9][1] = mkrToCronos[1];
+
+        // basic reconstitution between two tokens
+        // SUT: MKR, CRONOS
+        address treasury = makeAddr("treasury");
+
+        uint96 weiAmount = 10000 ether;
+        vm.deal(treasury, weiAmount);
+
+        vm.startPrank(treasury);
+        vault.rebalance{value: weiAmount}(testTokens, routes);
+        vm.stopPrank();
+
+        TokenBalance[10] memory balances = getVaultBalances();
+        for (uint8 i; i < 10; i++) {
+            assertGt(
+                balances[i].balance,
+                0,
+                "Post-rebalance vault balances should be greater than 0"
+            );
+        }
     }
 
     // Returns the amount of tokens that is x% of the balance of the vault
