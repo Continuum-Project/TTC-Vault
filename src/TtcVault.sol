@@ -258,25 +258,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         // not percentages, concrete values
         int256[10] memory deviations;
         
-        // for rETH, use balancer and uniswap with predetermined weights to swap
-        // assumption: route[0] is a single route for rETH (since there is no need to use some proxy token between rETH/ETH)
-        Route calldata rEthRoute = routes[0][0];
-        if (rEthRoute.tokenIn != address(0)) { // if the route is not specified, no swap is required
-            if (rEthRoute.tokenIn == address(i_rEthToken)) {
-                // get ETH for rETH
-                uint256 rEthAmountForEth = rEthRoute.amountIn;
-                executeRocketSwapFrom(rEthAmountForEth, rEthRoute.amountOutMinimum);
-            } else if (rEthRoute.tokenOut == address(i_rEthToken)) {
-                // get rETH for ETH
-                uint256 ethAmountForREth = rEthRoute.amountIn;
-                executeRocketSwapTo(ethAmountForREth, rEthRoute.amountOutMinimum);
-            } else {
-                revert InvalidRoute();
-            }
-        }
-
         // perform swaps for other tokens
-        for (uint8 i = 1; i < 10; i++) {
+        for (uint8 i; i < 10; i++) {
             // if the weight is the same, or no routes provided - no need to swap
             if (_newTokens[i].weight == constituentTokens[i].weight || routes[i][0].tokenIn == address(0)) {
                 continue;
@@ -286,6 +269,27 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             for (uint8 j; j < routes[i].length; j++) {
                 if (routes[i][j].tokenIn == address(0)) {
                     break;
+                }
+                
+                // custom logic for rETH swaps
+                // TODO: abstract this into a separate function
+                if (routes[i][j].tokenIn == address(i_rEthToken) || routes[i][j].tokenOut == address(i_rEthToken)) {
+                    // for rETH, use balancer and uniswap with predetermined weights to swap
+                    // assumption: route[0] is a single route for rETH (since there is no need to use some proxy token between rETH/ETH)
+                    Route calldata rEthRoute = routes[i][j];
+
+                    // use rocket swap for rETH
+                    if (rEthRoute.tokenIn == address(i_rEthToken) && rEthRoute.tokenOut == address(i_wEthToken)) {
+                        // get ETH for rETH
+                        uint256 rEthAmountForEth = rEthRoute.amountIn;
+                        executeRocketSwapFrom(rEthAmountForEth, rEthRoute.amountOutMinimum);
+                    } else if (rEthRoute.tokenOut == address(i_rEthToken) && rEthRoute.tokenIn == address(i_wEthToken)) {
+                        // get rETH for ETH
+                        uint256 ethAmountForREth = rEthRoute.amountIn;
+                        executeRocketSwapTo(ethAmountForREth, rEthRoute.amountOutMinimum);
+                    } else {
+                        revert InvalidRoute();
+                    }
                 }
 
                 // get routes for the swap
