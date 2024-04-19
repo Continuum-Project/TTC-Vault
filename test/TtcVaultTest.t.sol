@@ -159,8 +159,8 @@ contract VaultTest is TtcTestContext {
         assertGt(price, 0, "Price of SHIB should be greater than 0");
 
         // TONCOIN: SOMETHING WRONG WITH THE TONCOIN PRICE
-        // price = vault.getLatestPriceInEthOf(2);
-        // assertGt(price, 0, "Price of TONCOIN should be greater than 0");
+        price = vault.getLatestPriceInEthOf(2);
+        assertGt(price, 0, "Price of OKB should be greater than 0");
 
         // LINK
         price = vault.getLatestPriceInEthOf(3);
@@ -287,6 +287,10 @@ contract VaultTest is TtcTestContext {
                 "Post-rebalance vault balances should be greater than 0"
             );
         }
+    }
+
+    // this function does not change the weights, but adds a new token in place of the old one
+    function testRebalance_PairReconstitution() public {
 
     }
 
