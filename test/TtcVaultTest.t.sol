@@ -151,43 +151,53 @@ contract VaultTest is TtcTestContext {
 
     function testGetLatestPriceInEthOf() view public {
         // rETH
-        uint256 price = vault.getLatestPriceInEthOf(0);
+        (, address tokenAddress) = vault.constituentTokens(0);
+        uint256 price = vault.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of rETH should be greater than 0");
 
         // SHIB
-        price = vault.getLatestPriceInEthOf(1);
+        (, tokenAddress) = vault.constituentTokens(1);
+        price = vault.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of SHIB should be greater than 0");
 
-        // TONCOIN: SOMETHING WRONG WITH THE TONCOIN PRICE
-        price = vault.getLatestPriceInEthOf(2);
+        // OKB
+        (, tokenAddress) = vault.constituentTokens(2);
+        price = vault.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of OKB should be greater than 0");
 
         // LINK
-        price = vault.getLatestPriceInEthOf(3);
+        (, tokenAddress) = vault.constituentTokens(3);
+        price = vault.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of LINK should be greater than 0");
 
         // wBTC
-        price = vault.getLatestPriceInEthOf(4);
+        (, tokenAddress) = vault.constituentTokens(4);
+        price = vault.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of wBTC should be greater than 0");
 
         // UNI
-        price = vault.getLatestPriceInEthOf(5);
+        (, tokenAddress) = vault.constituentTokens(5);
+        price = vault.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of UNI should be greater than 0");
 
         // MATIC
-        price = vault.getLatestPriceInEthOf(6);
+        (, tokenAddress) = vault.constituentTokens(6);
+        price = vault.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of MATIC should be greater than 0");
 
         // ARB
-        price = vault.getLatestPriceInEthOf(7);
+        (, tokenAddress) = vault.constituentTokens(7);
+        price = vault.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of ARB should be greater than 0");
 
         // MANTLE
-        price = vault.getLatestPriceInEthOf(8);
+        (, tokenAddress) = vault.constituentTokens(8);
+        price = vault.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of MANTLE should be greater than 0");
 
         // MKR
-        price = vault.getLatestPriceInEthOf(9);
+        (, tokenAddress) = vault.constituentTokens(9);
+        price = vault.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of MKR should be greater than 0");
     }
 
@@ -250,7 +260,7 @@ contract VaultTest is TtcTestContext {
         Route[] memory mkrToShib = new Route[](2);
 
         uint256 mkrIn = xPercentFromBalance(33, MKR_ADDRESS); // 33% of MKR balance
-        uint256 intermediate = withSlippage5p(tokensToEthPrice(mkrIn, 9));
+        uint256 intermediate = withSlippage5p(tokensToEthPrice(mkrIn, MKR_ADDRESS));
         mkrToShib[0] = Route(MKR_ADDRESS, WETH_ADDRESS, mkrIn, intermediate);
         mkrToShib[1] = Route(WETH_ADDRESS, SHIB_ADDRESS, intermediate, 0 ether);
 
@@ -261,7 +271,7 @@ contract VaultTest is TtcTestContext {
         Route[] memory wbtcToShib = new Route[](2);
 
         uint256 wbtcIn = xPercentFromBalance(20, WBTC_ADDRESS); // 20% of wBTC balance
-        intermediate = withSlippage5p(tokensToEthPrice(wbtcIn, 4));
+        intermediate = withSlippage5p(tokensToEthPrice(wbtcIn, WBTC_ADDRESS));
         wbtcToShib[0] = Route(WBTC_ADDRESS, WETH_ADDRESS, wbtcIn, intermediate);
         wbtcToShib[1] = Route(WETH_ADDRESS, SHIB_ADDRESS, intermediate, 0 ether);
 
@@ -293,24 +303,24 @@ contract VaultTest is TtcTestContext {
     function testRebalance_PairReconstitution() public {
         testInitialMint();
 
-        // SUT: change MKR to CRONOS
+        // SUT: change MKR to RENDER
         Token[10] memory testTokens = tokens;
-        testTokens[9].tokenAddress = CRONOS_ADDRESS;
+        testTokens[9].tokenAddress = RENDER_ADDRESS;
 
         Route[10][] memory routes = new Route[10][](10);
 
-        Route[] memory mkrToCronos = new Route[](2);
+        Route[] memory mkrToRender = new Route[](2);
 
         uint256 mkrIn = xPercentFromBalance(100, MKR_ADDRESS); // 100% of MKR balance
-        uint256 intermediate = withSlippage5p(tokensToEthPrice(mkrIn, 9));
-        mkrToCronos[0] = Route(MKR_ADDRESS, WETH_ADDRESS, mkrIn, intermediate);
-        mkrToCronos[1] = Route(WETH_ADDRESS, CRONOS_ADDRESS, intermediate, 0 ether);
+        uint256 intermediate = withSlippage5p(tokensToEthPrice(mkrIn, MKR_ADDRESS));
+        mkrToRender[0] = Route(MKR_ADDRESS, WETH_ADDRESS, mkrIn, intermediate);
+        mkrToRender[1] = Route(WETH_ADDRESS, RENDER_ADDRESS, intermediate, 0 ether);
 
-        routes[9][0] = mkrToCronos[0];
-        routes[9][1] = mkrToCronos[1];
+        routes[9][0] = mkrToRender[0];
+        routes[9][1] = mkrToRender[1];
 
         // basic reconstitution between two tokens
-        // SUT: MKR, CRONOS
+        // SUT: MKR, RENDER
         address treasury = makeAddr("treasury");
 
         uint96 weiAmount = 10000 ether;
@@ -329,7 +339,7 @@ contract VaultTest is TtcTestContext {
             );
         }
 
-        // assert that CRONOS was added to the vault
+        // assert that RENDER was added to the vault
         Token[10] memory newTokens;
         for (uint8 i = 0; i < 10; i++) {
             (uint8 tokenIndex, address tokenAddress) = vault.constituentTokens(i);
@@ -338,39 +348,39 @@ contract VaultTest is TtcTestContext {
 
         assertEq(
             newTokens[9].tokenAddress,
-            CRONOS_ADDRESS,
-            "CRONOS should be in the vault"
+            RENDER_ADDRESS,
+            "RENDER should be in the vault"
         );
     }
 
-    // MKR -> CRONOS
+    // MKR -> RENDER
     // MANTLE -> AAVE
     function testRebalance_MultipleReconstitution() public {
         testInitialMint();
 
-        // SUT: change MKR to CRONOS, MANTLE to AAVE
+        // SUT: change MKR to RENDER, MANTLE to AAVE
         Token[10] memory testTokens = tokens;
-        testTokens[9].tokenAddress = CRONOS_ADDRESS;
+        testTokens[9].tokenAddress = RENDER_ADDRESS;
         testTokens[8].tokenAddress = AAVE_ADDRESS;
 
         Route[10][] memory routes = new Route[10][](10);
 
-        // calculate MKR -> CRONOS route (100%)
-        Route[] memory mkrToCronos = new Route[](2);
+        // calculate MKR -> RENDER route (100%)
+        Route[] memory mkrToRender = new Route[](2);
 
         uint256 mkrIn = xPercentFromBalance(100, MKR_ADDRESS); // 100% of MKR balance
-        uint256 intermediate = withSlippage5p(tokensToEthPrice(mkrIn, 9));
-        mkrToCronos[0] = Route(MKR_ADDRESS, WETH_ADDRESS, mkrIn, intermediate);
-        mkrToCronos[1] = Route(WETH_ADDRESS, CRONOS_ADDRESS, intermediate, 0 ether);
+        uint256 intermediate = withSlippage5p(tokensToEthPrice(mkrIn, MKR_ADDRESS));
+        mkrToRender[0] = Route(MKR_ADDRESS, WETH_ADDRESS, mkrIn, intermediate);
+        mkrToRender[1] = Route(WETH_ADDRESS, RENDER_ADDRESS, intermediate, 0 ether);
 
-        routes[9][0] = mkrToCronos[0];
-        routes[9][1] = mkrToCronos[1];
+        routes[9][0] = mkrToRender[0];
+        routes[9][1] = mkrToRender[1];
 
         // calculate MANTLE -> AAVE route (100%)
         Route[] memory mantleToAave = new Route[](2);
 
         uint256 mantleIn = xPercentFromBalance(100, MANTLE_ADDRESS); // 100% of MANTLE balance
-        intermediate = withSlippage5p(tokensToEthPrice(mantleIn, 8));
+        intermediate = withSlippage5p(tokensToEthPrice(mantleIn, MANTLE_ADDRESS));
         mantleToAave[0] = Route(MANTLE_ADDRESS, WETH_ADDRESS, mantleIn, intermediate);
         mantleToAave[1] = Route(WETH_ADDRESS, AAVE_ADDRESS, intermediate, 0 ether);
 
@@ -378,7 +388,7 @@ contract VaultTest is TtcTestContext {
         routes[8][1] = mantleToAave[1];
 
         // basic reconstitution between two tokens
-        // SUT: MKR, CRONOS, MANTLE, AAVE
+        // SUT: MKR, RENDER, MANTLE, AAVE
         address treasury = makeAddr("treasury");
 
         uint96 weiAmount = 10000 ether;
@@ -411,9 +421,75 @@ contract VaultTest is TtcTestContext {
         );
         assertEq(
             newTokens[9].tokenAddress,
-            CRONOS_ADDRESS,
-            "CRONOS should be in the vault"
+            RENDER_ADDRESS,
+            "RENDER should be in the vault"
         );
+    }
+
+    // this tests both the weight changes and the reconstitution
+    function testRebalance_ReconstitutionAndRebalance() public {
+        testInitialMint();
+
+        // SUT: 
+        // 1. change MKR to RENDER, MANTLE to AAVE
+        // 2. change RENDER weight from 10 to 5, add the 5 to rETH
+        Token[10] memory testTokens = tokens;
+        testTokens[8].tokenAddress = AAVE_ADDRESS;
+        testTokens[9].tokenAddress = RENDER_ADDRESS;
+        testTokens[9].weight = 5;
+        testTokens[0].weight = 55;
+
+        Route[10][] memory routes = new Route[10][](10);
+
+        // calculate MKR -> RENDER route (100%)
+        Route[] memory mkrToRender = new Route[](2);
+
+        uint256 mkrIn = xPercentFromBalance(100, MKR_ADDRESS); // 100% of MKR balance
+        uint256 intermediate = withSlippage5p(tokensToEthPrice(mkrIn, MKR_ADDRESS));
+        mkrToRender[0] = Route(MKR_ADDRESS, WETH_ADDRESS, mkrIn, intermediate);
+        mkrToRender[1] = Route(WETH_ADDRESS, RENDER_ADDRESS, intermediate, 0 ether);
+
+        routes[9][0] = mkrToRender[0];
+        routes[9][1] = mkrToRender[1];
+
+        // calculate RENDER -> rETH route (50%)
+        Route[] memory renderToREth = new Route[](2);
+
+        uint256 renderIn = xPercentFromBalance(50, RENDER_ADDRESS); // 50% of RENDER balance
+        intermediate = withSlippage5p(tokensToEthPrice(renderIn, RENDER_ADDRESS));
+        renderToREth[0] = Route(RENDER_ADDRESS, WETH_ADDRESS, renderIn, intermediate);
+        renderToREth[1] = Route(WETH_ADDRESS, RETH_ADDRESS, intermediate, 0 ether);
+
+        // calculate MANTLE -> AAVE route (100%)
+        Route[] memory mantleToAave = new Route[](2);
+
+        uint256 mantleIn = xPercentFromBalance(100, MANTLE_ADDRESS); // 100% of MANTLE balance
+        intermediate = withSlippage5p(tokensToEthPrice(mantleIn, MANTLE_ADDRESS));
+        mantleToAave[0] = Route(MANTLE_ADDRESS, WETH_ADDRESS, mantleIn, intermediate);
+        mantleToAave[1] = Route(WETH_ADDRESS, AAVE_ADDRESS, intermediate, 0 ether);
+
+        routes[8][0] = mantleToAave[0];
+        routes[8][1] = mantleToAave[1];
+
+        // basic reconstitution between two tokens
+        // SUT: MKR, RENDER, MANTLE, AAVE
+        address treasury = makeAddr("treasury");
+
+        uint96 weiAmount = 10000 ether;
+        vm.deal(treasury, weiAmount);
+
+        vm.startPrank(treasury);
+        vault.rebalance{value: weiAmount}(testTokens, routes);
+        vm.stopPrank();
+
+        TokenBalance[10] memory balances = getVaultBalances();
+        for (uint8 i; i < 10; i++) {
+            assertGt(
+                balances[i].balance,
+                0,
+                "Post-rebalance vault balances should be greater than 0"
+            );
+        }
     }
 
     // Returns the amount of tokens that is x% of the balance of the vault
@@ -426,13 +502,13 @@ contract VaultTest is TtcTestContext {
     }
 
     // Returns the amount of eth that is equivalent to the amount of tokens
-    function tokensToEthPrice(uint256 amount, uint8 tokenIndex)
+    function tokensToEthPrice(uint256 amount, address tokenAddress)
         private
         view
         returns (uint256)
     {   
-        uint256 tokenDecimals = ERC20(tokens[tokenIndex].tokenAddress).decimals();
-        return (amount * vault.getLatestPriceInEthOf(tokenIndex)) / (10**tokenDecimals);
+        uint256 tokenDecimals = ERC20(tokenAddress).decimals();
+        return (amount * vault.getLatestPriceInEthOf(tokenAddress)) / (10**tokenDecimals);
     }
 
     // Returns the amount with 3% slippage applied

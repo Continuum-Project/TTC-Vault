@@ -8,7 +8,7 @@ import "./TTC.sol";
 // Types
 import {Route, Token} from "./types/types.sol";
 import {IUniswapV3PoolState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
-// import {console} from "forge-std/Test.sol";
+import {console} from "forge-std/Test.sol";
 
 // Interfaces
 import "./interfaces/ITtcVault.sol";
@@ -342,7 +342,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                 // absolute value of deviation
                 uint256 uDeviation = abs(deviation);
 
-                uint256 tokenValueInEth = getLatestPriceInEthOf(i);
+                uint256 tokenValueInEth = getLatestPriceInEthOf(tokenAddress);
                 uint256 deviationToSellInToken = uDeviation * 10 ** ERC20(tokenAddress).decimals() / tokenValueInEth;
 
                 IERC20(tokenAddress).approve(address(i_swapRouter), deviationToSellInToken);
@@ -375,7 +375,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      */
     function checkTokenList(Token[10] memory _tokens) internal view returns (bool) {
         // Make sure the first token is always rETH
-        if (_tokens[0].tokenAddress != address(i_rEthToken) || _tokens[0].weight != 50) {
+        if (_tokens[0].tokenAddress != address(i_rEthToken) || _tokens[0].weight < 50) {
             return false;
         }
 
@@ -512,49 +512,38 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
     /**
      * @notice Get the latest price of a token
-     * @param constituentTokenIndex The index of the token in the constituentTokens array
+     * @param tokenAddress The address of the token to get the price of
      * @return The number of ETH that has to be paid for 1 constituent token
      */
-    function getLatestPriceInEthOf(uint8 constituentTokenIndex) public view returns (uint256) {
-        address tokenAddress = constituentTokens[constituentTokenIndex].tokenAddress;
+    function getLatestPriceInEthOf(address tokenAddress) public view returns (uint256) {
         address wEthAddress = address(i_wEthToken);
 
         // if token is rETH (0 index), use native contract for better price accuracy
-        if (constituentTokenIndex == 0) {
+        if (tokenAddress == address(i_rEthToken)) {
             return i_rEthToken.getEthValue(1e18);
         }
 
         // get a token/wETH pool's address
         
-        // payload to get a pool address
-        bytes memory payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
-        (bool success, bytes memory data) = i_uniswapFactory.staticcall(payload);
-
-        // try to find this pool in all three fee tiers
-        // TODO: refactor this abomination, maybe provide fee tier as a param
-        if (!success) {
-            payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_SECONDARY_POOL_FEE);
-            (success, data) = i_uniswapFactory.staticcall(payload);
-            if (!success) {
-                payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_TERTIARY_POOL_FEE);
-                (success, data) = i_uniswapFactory.staticcall(payload);
-                if (!success) {
-                    payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_QUATERNARY_POOL_FEE);
-                    (success, data) = i_uniswapFactory.staticcall(payload);
-                    if (!success) {
-                        revert PoolDoesNotExist();
-                    }
-                }
-            }
-        }
-
-        address pool = abi.decode(data, (address));
+        address pool = getPoolWithFee(tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
         if (pool == address(0)) {
             revert PoolDoesNotExist();
         }
 
         // convert to IUniswapV3PoolState to get access to sqrtPriceX96
         IUniswapV3PoolState _pool = IUniswapV3PoolState(pool);
+        
+        uint24[3] memory feeTiers = [UNISWAP_SECONDARY_POOL_FEE, UNISWAP_TERTIARY_POOL_FEE, UNISWAP_QUATERNARY_POOL_FEE];
+
+        for (uint8 i; i < 3; i++) {
+            pool = getPoolWithFee(tokenAddress, wEthAddress, feeTiers[i]);
+            if (pool == address(0)) {
+                continue;
+            } else {
+                _pool = IUniswapV3PoolState(pool);
+                break;
+            }
+        }
 
         (uint160 sqrtPriceX96, , , , , ,) = _pool.slot0(); // get sqrtPrice of a pool multiplied by 2^96
         uint256 decimals = 10 ** ERC20(tokenAddress).decimals();
@@ -573,7 +562,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         uint256 totalAum;
         for (uint8 i; i < 10; i++) {
             address tokenAddress = constituentTokens[i].tokenAddress;
-            uint256 tokenPrice = getLatestPriceInEthOf(i);
+            uint256 tokenPrice = getLatestPriceInEthOf(tokenAddress);
             uint256 tokenBalance = IERC20(tokenAddress).balanceOf(address(this));
 
             aumPerToken[i] = (tokenBalance * tokenPrice) / (10 ** ERC20(tokenAddress).decimals());
@@ -590,5 +579,22 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      */
     function abs(int x) private pure returns (uint) {
         return x >= 0 ? uint(x) : uint(-x);
+    }
+
+    /**
+     * @notice Get the address of a pool with a given fee
+     * @param tokenIn The address of the token to swap from
+     * @param tokenOut The address of the token to swap to
+     * @param fee The fee of the pool
+     * @return The address of the pool
+     */
+    function getPoolWithFee(address tokenIn, address tokenOut, uint24 fee) public view returns (address) {
+        bytes memory payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenIn, tokenOut, fee);
+        (bool success, bytes memory data) = i_uniswapFactory.staticcall(payload);
+        if (!success) {
+            revert PoolDoesNotExist();
+        }
+
+        return abi.decode(data, (address));
     }
 }

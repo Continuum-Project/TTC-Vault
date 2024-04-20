@@ -36,7 +36,7 @@ contract TtcTestContext is Test {
     address constant ARB_ADDRESS = address(0xB50721BCf8d664c30412Cfbc6cf7a15145234ad1);
     address constant MANTLE_ADDRESS = address(0x3c3a81e81dc49A522A592e7622A7E711c06bf354);
     address constant MKR_ADDRESS = address(0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2);
-    address constant CRONOS_ADDRESS = address(0xA0b73E1Ff0B80914AB6fe0444E65848C4C34450b);
+    address constant RENDER_ADDRESS = address(0x6De037ef9aD2725EB40118Bb1702EBb27e4Aeb24);
     address constant AAVE_ADDRESS = address(0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9);
 
     TtcVault public vault;
@@ -62,10 +62,11 @@ contract TtcTestContext is Test {
     function getVaultBalances() public view returns (TokenBalance[10] memory) {
         TokenBalance[10] memory balances;
         for (uint8 i; i < 10; i++) {
-            uint256 balance = IERC20(tokens[i].tokenAddress).balanceOf(
+            (, address tokenAddress) = vault.constituentTokens(i);
+            uint256 balance = IERC20(tokenAddress).balanceOf(
                 address(vault)
             );
-            balances[i] = TokenBalance(tokens[i].tokenAddress, balance);
+            balances[i] = TokenBalance(tokenAddress, balance);
         }
         return balances;
     }
