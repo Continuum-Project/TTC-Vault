@@ -432,12 +432,12 @@ contract VaultTest is TtcTestContext {
 
         // SUT: 
         // 1. change MKR to RENDER, MANTLE to AAVE
-        // 2. change RENDER weight from 10 to 5, add the 5 to rETH
+        // 2. change RENDER weight from 10 to 5, add the 5 to SHIB
         Token[10] memory testTokens = tokens;
         testTokens[8].tokenAddress = AAVE_ADDRESS;
         testTokens[9].tokenAddress = RENDER_ADDRESS;
         testTokens[9].weight = 5;
-        testTokens[0].weight = 55;
+        testTokens[1].weight = 10;
 
         Route[10][] memory routes = new Route[10][](10);
 
@@ -452,13 +452,13 @@ contract VaultTest is TtcTestContext {
         routes[9][0] = mkrToRender[0];
         routes[9][1] = mkrToRender[1];
 
-        // calculate RENDER -> rETH route (50%)
+        // calculate RENDER -> SHIB route (50%)
         Route[] memory renderToREth = new Route[](2);
 
         uint256 renderIn = xPercentFromBalance(50, RENDER_ADDRESS); // 50% of RENDER balance
         intermediate = withSlippage5p(tokensToEthPrice(renderIn, RENDER_ADDRESS));
         renderToREth[0] = Route(RENDER_ADDRESS, WETH_ADDRESS, renderIn, intermediate);
-        renderToREth[1] = Route(WETH_ADDRESS, RETH_ADDRESS, intermediate, 0 ether);
+        renderToREth[1] = Route(WETH_ADDRESS, SHIB_ADDRESS, intermediate, 0 ether);
 
         // calculate MANTLE -> AAVE route (100%)
         Route[] memory mantleToAave = new Route[](2);
