@@ -375,7 +375,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      */
     function checkTokenList(Token[10] memory _tokens) internal view returns (bool) {
         // Make sure the first token is always rETH
-        if (_tokens[0].tokenAddress != address(i_rEthToken) || _tokens[0].weight < 50) {
+        if (_tokens[0].tokenAddress != address(i_rEthToken) || _tokens[0].weight != 50) {
             return false;
         }
 
