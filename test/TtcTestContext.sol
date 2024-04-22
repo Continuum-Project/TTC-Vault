@@ -27,7 +27,8 @@ contract TtcTestContext is Test {
 
     // TOKEN ADDRESSES
     address constant SHIB_ADDRESS = address(0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE);
-    address constant TONCOIN_ADDRESS = address(0x582d872A1B094FC48F5DE31D3B73F2D9bE47def1);
+    // address constant TONCOIN_ADDRESS = address(0x582d872A1B094FC48F5DE31D3B73F2D9bE47def1);
+    address constant OKB_ADDRESS = address(0x75231F58b43240C9718Dd58B4967c5114342a86c);
     address constant LINK_ADDRESS = address(0x514910771AF9Ca656af840dff83E8264EcF986CA);
     address constant WBTC_ADDRESS = address(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     address constant UNI_ADDRESS = address(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984);
@@ -35,6 +36,8 @@ contract TtcTestContext is Test {
     address constant ARB_ADDRESS = address(0xB50721BCf8d664c30412Cfbc6cf7a15145234ad1);
     address constant MANTLE_ADDRESS = address(0x3c3a81e81dc49A522A592e7622A7E711c06bf354);
     address constant MKR_ADDRESS = address(0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2);
+    address constant RENDER_ADDRESS = address(0x6De037ef9aD2725EB40118Bb1702EBb27e4Aeb24);
+    address constant AAVE_ADDRESS = address(0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9);
 
     TtcVault public vault;
     Token[10] public tokens;
@@ -59,10 +62,11 @@ contract TtcTestContext is Test {
     function getVaultBalances() public view returns (TokenBalance[10] memory) {
         TokenBalance[10] memory balances;
         for (uint8 i; i < 10; i++) {
-            uint256 balance = IERC20(tokens[i].tokenAddress).balanceOf(
+            (, address tokenAddress) = vault.constituentTokens(i);
+            uint256 balance = IERC20(tokenAddress).balanceOf(
                 address(vault)
             );
-            balances[i] = TokenBalance(tokens[i].tokenAddress, balance);
+            balances[i] = TokenBalance(tokenAddress, balance);
         }
         return balances;
     }
@@ -87,11 +91,18 @@ contract TtcTestContext is Test {
                 SHIB_ADDRESS
             )
         );
-        // TONCOIN Token
+        // // TONCOIN Token
+        // tokens[2] = (
+        //     Token(
+        //         5,
+        //         TONCOIN_ADDRESS
+        //     )
+        // );
+        // OKB Token
         tokens[2] = (
             Token(
                 5,
-                TONCOIN_ADDRESS
+                OKB_ADDRESS
             )
         );
         // LINK Token

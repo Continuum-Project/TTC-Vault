@@ -8,7 +8,7 @@ import "./TTC.sol";
 // Types
 import {Route, Token} from "./types/types.sol";
 import {IUniswapV3PoolState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
-// import {console} from "forge-std/Test.sol";
+import {console} from "forge-std/Test.sol";
 
 // Interfaces
 import "./interfaces/ITtcVault.sol";
@@ -49,7 +49,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     IrETH public immutable i_rEthToken;
 
     // Current tokens and their alloGcations in the vault
-    Token[10] constituentTokens;
+    Token[10] public constituentTokens;
 
     // Amount of ETH allocated into rEth so far (after swap fees)
     uint256 private ethAllocationREth;
@@ -258,25 +258,8 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         // not percentages, concrete values
         int256[10] memory deviations;
         
-        // for rETH, use balancer and uniswap with predetermined weights to swap
-        // assumption: route[0] is a single route for rETH (since there is no need to use some proxy token between rETH/ETH)
-        Route calldata rEthRoute = routes[0][0];
-        if (rEthRoute.tokenIn != address(0)) { // if the route is not specified, no swap is required
-            if (rEthRoute.tokenIn == address(i_rEthToken)) {
-                // get ETH for rETH
-                uint256 rEthAmountForEth = rEthRoute.amountIn;
-                executeRocketSwapFrom(rEthAmountForEth, rEthRoute.amountOutMinimum);
-            } else if (rEthRoute.tokenOut == address(i_rEthToken)) {
-                // get rETH for ETH
-                uint256 ethAmountForREth = rEthRoute.amountIn;
-                executeRocketSwapTo(ethAmountForREth, rEthRoute.amountOutMinimum);
-            } else {
-                revert InvalidRoute();
-            }
-        }
-
         // perform swaps for other tokens
-        for (uint8 i = 1; i < 10; i++) {
+        for (uint8 i; i < 10; i++) {
             // if the weight is the same, or no routes provided - no need to swap
             if (_newTokens[i].weight == constituentTokens[i].weight || routes[i][0].tokenIn == address(0)) {
                 continue;
@@ -286,6 +269,27 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             for (uint8 j; j < routes[i].length; j++) {
                 if (routes[i][j].tokenIn == address(0)) {
                     break;
+                }
+                
+                // custom logic for rETH swaps
+                // TODO: abstract this into a separate function
+                if (routes[i][j].tokenIn == address(i_rEthToken) || routes[i][j].tokenOut == address(i_rEthToken)) {
+                    // for rETH, use balancer and uniswap with predetermined weights to swap
+                    // assumption: route[0] is a single route for rETH (since there is no need to use some proxy token between rETH/ETH)
+                    Route calldata rEthRoute = routes[i][j];
+
+                    // use rocket swap for rETH
+                    if (rEthRoute.tokenIn == address(i_rEthToken) && rEthRoute.tokenOut == address(i_wEthToken)) {
+                        // get ETH for rETH
+                        uint256 rEthAmountForEth = rEthRoute.amountIn;
+                        executeRocketSwapFrom(rEthAmountForEth, rEthRoute.amountOutMinimum);
+                    } else if (rEthRoute.tokenOut == address(i_rEthToken) && rEthRoute.tokenIn == address(i_wEthToken)) {
+                        // get rETH for ETH
+                        uint256 ethAmountForREth = rEthRoute.amountIn;
+                        executeRocketSwapTo(ethAmountForREth, rEthRoute.amountOutMinimum);
+                    } else {
+                        revert InvalidRoute();
+                    }
                 }
 
                 // get routes for the swap
@@ -338,7 +342,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                 // absolute value of deviation
                 uint256 uDeviation = abs(deviation);
 
-                uint256 tokenValueInEth = getLatestPriceInEthOf(i);
+                uint256 tokenValueInEth = getLatestPriceInEthOf(tokenAddress);
                 uint256 deviationToSellInToken = uDeviation * 10 ** ERC20(tokenAddress).decimals() / tokenValueInEth;
 
                 IERC20(tokenAddress).approve(address(i_swapRouter), deviationToSellInToken);
@@ -493,64 +497,39 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     }
 
     /**
-     * @notice Checks if the new weights for the tokens are valid.
-     * @param newWeights The new weights for the tokens in the vault.
-     * @return bool Returns true if the weights are valid, otherwise false.
-     * TODO: too similar to checkTokenList, consider merging
-     */
-    function validWeights(uint8[10] calldata newWeights) internal pure returns (bool) {
-        uint8 totalWeight;
-        for (uint8 i; i < 10; i++) {
-            totalWeight += newWeights[i];
-        }
-        return (totalWeight == 100);
-    }
-
-    /**
      * @notice Get the latest price of a token
-     * @param constituentTokenIndex The index of the token in the constituentTokens array
+     * @param tokenAddress The address of the token to get the price of
      * @return The number of ETH that has to be paid for 1 constituent token
      */
-    function getLatestPriceInEthOf(uint8 constituentTokenIndex) public view returns (uint256) {
-        address tokenAddress = constituentTokens[constituentTokenIndex].tokenAddress;
+    function getLatestPriceInEthOf(address tokenAddress) public view returns (uint256) {
         address wEthAddress = address(i_wEthToken);
 
         // if token is rETH (0 index), use native contract for better price accuracy
-        if (constituentTokenIndex == 0) {
+        if (tokenAddress == address(i_rEthToken)) {
             return i_rEthToken.getEthValue(1e18);
         }
 
         // get a token/wETH pool's address
         
-        // payload to get a pool address
-        bytes memory payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
-        (bool success, bytes memory data) = i_uniswapFactory.staticcall(payload);
-
-        // try to find this pool in all three fee tiers
-        // TODO: refactor this abomination, maybe provide fee tier as a param
-        if (!success) {
-            payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_SECONDARY_POOL_FEE);
-            (success, data) = i_uniswapFactory.staticcall(payload);
-            if (!success) {
-                payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_TERTIARY_POOL_FEE);
-                (success, data) = i_uniswapFactory.staticcall(payload);
-                if (!success) {
-                    payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenAddress, wEthAddress, UNISWAP_QUATERNARY_POOL_FEE);
-                    (success, data) = i_uniswapFactory.staticcall(payload);
-                    if (!success) {
-                        revert PoolDoesNotExist();
-                    }
-                }
-            }
-        }
-
-        address pool = abi.decode(data, (address));
+        address pool = getPoolWithFee(tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
         if (pool == address(0)) {
             revert PoolDoesNotExist();
         }
 
         // convert to IUniswapV3PoolState to get access to sqrtPriceX96
         IUniswapV3PoolState _pool = IUniswapV3PoolState(pool);
+        
+        uint24[3] memory feeTiers = [UNISWAP_SECONDARY_POOL_FEE, UNISWAP_TERTIARY_POOL_FEE, UNISWAP_QUATERNARY_POOL_FEE];
+
+        for (uint8 i; i < 3; i++) {
+            pool = getPoolWithFee(tokenAddress, wEthAddress, feeTiers[i]);
+            if (pool == address(0)) {
+                continue;
+            } else {
+                _pool = IUniswapV3PoolState(pool);
+                break;
+            }
+        }
 
         (uint160 sqrtPriceX96, , , , , ,) = _pool.slot0(); // get sqrtPrice of a pool multiplied by 2^96
         uint256 decimals = 10 ** ERC20(tokenAddress).decimals();
@@ -569,7 +548,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         uint256 totalAum;
         for (uint8 i; i < 10; i++) {
             address tokenAddress = constituentTokens[i].tokenAddress;
-            uint256 tokenPrice = getLatestPriceInEthOf(i);
+            uint256 tokenPrice = getLatestPriceInEthOf(tokenAddress);
             uint256 tokenBalance = IERC20(tokenAddress).balanceOf(address(this));
 
             aumPerToken[i] = (tokenBalance * tokenPrice) / (10 ** ERC20(tokenAddress).decimals());
@@ -586,5 +565,22 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      */
     function abs(int x) private pure returns (uint) {
         return x >= 0 ? uint(x) : uint(-x);
+    }
+
+    /**
+     * @notice Get the address of a pool with a given fee
+     * @param tokenIn The address of the token to swap from
+     * @param tokenOut The address of the token to swap to
+     * @param fee The fee of the pool
+     * @return The address of the pool
+     */
+    function getPoolWithFee(address tokenIn, address tokenOut, uint24 fee) public view returns (address) {
+        bytes memory payload = abi.encodeWithSignature("getPool(address,address,uint24)", tokenIn, tokenOut, fee);
+        (bool success, bytes memory data) = i_uniswapFactory.staticcall(payload);
+        if (!success) {
+            revert PoolDoesNotExist();
+        }
+
+        return abi.decode(data, (address));
     }
 }
