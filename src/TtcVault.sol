@@ -497,20 +497,6 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     }
 
     /**
-     * @notice Checks if the new weights for the tokens are valid.
-     * @param newWeights The new weights for the tokens in the vault.
-     * @return bool Returns true if the weights are valid, otherwise false.
-     * TODO: too similar to checkTokenList, consider merging
-     */
-    function validWeights(uint8[10] calldata newWeights) internal pure returns (bool) {
-        uint8 totalWeight;
-        for (uint8 i; i < 10; i++) {
-            totalWeight += newWeights[i];
-        }
-        return (totalWeight == 100);
-    }
-
-    /**
      * @notice Get the latest price of a token
      * @param tokenAddress The address of the token to get the price of
      * @return The number of ETH that has to be paid for 1 constituent token
