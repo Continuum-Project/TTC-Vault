@@ -511,17 +511,11 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
         // get a token/wETH pool's address
         
-        address pool = getPoolWithFee(tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
-        if (pool == address(0)) {
-            revert PoolDoesNotExist();
-        }
+        uint24[4] memory feeTiers = [UNISWAP_PRIMARY_POOL_FEE, UNISWAP_SECONDARY_POOL_FEE, UNISWAP_TERTIARY_POOL_FEE, UNISWAP_QUATERNARY_POOL_FEE];
+        address pool;
+        IUniswapV3PoolState _pool;
 
-        // convert to IUniswapV3PoolState to get access to sqrtPriceX96
-        IUniswapV3PoolState _pool = IUniswapV3PoolState(pool);
-        
-        uint24[3] memory feeTiers = [UNISWAP_SECONDARY_POOL_FEE, UNISWAP_TERTIARY_POOL_FEE, UNISWAP_QUATERNARY_POOL_FEE];
-
-        for (uint8 i; i < 3; i++) {
+        for (uint8 i; i < 4; i++) {
             pool = getPoolWithFee(tokenAddress, wEthAddress, feeTiers[i]);
             if (pool == address(0)) {
                 continue;

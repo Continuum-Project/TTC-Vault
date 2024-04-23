@@ -492,6 +492,57 @@ contract VaultTest is TtcTestContext {
         }
     }
 
+    function testDifferenceOfPricesPostMint() public {
+        uint96 weiAmount = 100 ether;
+        address user = makeAddr("user");
+        vm.deal(user, weiAmount);
+
+        address[10] memory allTokens = [
+            RETH_ADDRESS,
+            SHIB_ADDRESS,
+            OKB_ADDRESS,
+            LINK_ADDRESS,
+            WBTC_ADDRESS,
+            UNI_ADDRESS,
+            MATIC_ADDRESS,
+            ARB_ADDRESS,
+            MANTLE_ADDRESS,
+            MKR_ADDRESS
+        ];
+
+        uint256[10] memory pricesBefore;
+
+        for (uint8 i = 0; i < 9; i++) {
+            uint256 price = vault.getLatestPriceInEthOf(allTokens[i]);
+            pricesBefore[i] = price;
+            console.log("Price of ", ERC20(allTokens[i]).name(), " before mint: ", price);
+        }
+
+        vm.startPrank(user);
+        vault.mint{value: weiAmount}();
+        vm.stopPrank();
+
+        uint256 h = vm.getBlockNumber();
+        vm.roll(h + 100);
+
+        console.log();
+        console.log("Block number: ", vm.getBlockNumber());
+        console.log();
+
+        for (uint8 i = 0; i < 9; i++) {
+            uint256 price = vault.getLatestPriceInEthOf(allTokens[i]);
+            console.log("Price of ", ERC20(allTokens[i]).name(), " after mint: ", price);
+        }
+
+        // get fractions
+        for (uint8 i = 0; i < 9; i++) {
+            uint256 priceBefore = pricesBefore[i] * 100000000;
+            uint256 priceAfter = vault.getLatestPriceInEthOf(allTokens[i]);
+            uint256 diff = priceBefore / priceAfter;
+            console.log("Fraction ", ERC20(allTokens[i]).name(), ": ", diff);
+        }
+    }
+
     // Returns the amount of tokens that is x% of the balance of the vault
     function xPercentFromBalance(uint8 percent, address tokenAddress)
         private
