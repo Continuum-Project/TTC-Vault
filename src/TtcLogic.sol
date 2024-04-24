@@ -9,6 +9,7 @@ import "./TTC.sol";
 import {Route, Token} from "./types/types.sol";
 import {IUniswapV3PoolState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
 import {console} from "forge-std/Test.sol";
+import "./TtcVault.sol";
 
 // Interfaces
 import "./interfaces/ITtcLogic.sol";
@@ -41,6 +42,7 @@ contract TtcLogic is ITtcLogic, ReentrancyGuard {
 
     // Immutable globals
     TTC public immutable i_ttcToken;
+    address public immutable i_ttcVault;
     address payable public immutable i_continuumTreasury;
     address public immutable i_uniswapFactory;
     ISwapRouter public immutable i_swapRouter;
@@ -82,6 +84,7 @@ contract TtcLogic is ITtcLogic, ReentrancyGuard {
         address _wEthAddress,
         address _rocketSwapRouter,
         address _uniswapFactoryAddress,
+        address _ttcVaultAddress,
         Token[10] memory _initialTokens
     ) {
         i_ttcToken = new TTC();
@@ -91,6 +94,7 @@ contract TtcLogic is ITtcLogic, ReentrancyGuard {
         i_rocketSwapRouter = RocketSwapRouter(payable(_rocketSwapRouter));
         i_rEthToken = i_rocketSwapRouter.rETH();
         i_uniswapFactory = _uniswapFactoryAddress;
+        i_ttcVault = _ttcVaultAddress;
 
         if (!checkTokenList(_initialTokens)) {
             revert InvalidTokenList();
@@ -127,9 +131,9 @@ contract TtcLogic is ITtcLogic, ReentrancyGuard {
         uint256 ethValueInREth = i_rEthToken.getRethValue(ethAmountForREth);
         uint256 minREthAmountOut = (ethValueInREth * (10000 - MAX_ROCKET_SWAP_PRICE_IMPACT)) / 10000;
         // Execute the rocket swap
-        uint256 initialREthBalance = i_rEthToken.balanceOf(address(this));
+        uint256 initialREthBalance = i_rEthToken.balanceOf(i_ttcVault);
         executeRocketSwapTo(ethAmountForREth, minREthAmountOut);
-        uint256 resultingREthBalance = i_rEthToken.balanceOf(address(this));
+        uint256 resultingREthBalance = i_rEthToken.balanceOf(i_ttcVault);
         // Get the pre-swap value of rETH (in ETH) in the vault based on the swap price
         aum += ((initialREthBalance * ethAmountForREth) / (resultingREthBalance - initialREthBalance));
         ethMintAmountAfterFees += (
@@ -148,7 +152,7 @@ contract TtcLogic is ITtcLogic, ReentrancyGuard {
             // Calculate amount of ETH to swap based on token weight in basket
             uint256 amountToSwap = (msg.value * token.weight) / 100;
             // Get pre-swap balance of token (represented with the precision of the token's decimals)
-            uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(address(this));
+            uint256 tokenBalance = IERC20(token.tokenAddress).balanceOf(i_ttcVault);
             // Execute swap and return the tokens received and fee pool which swap executed in
             // tokensReceived is represented with the precision of the tokenOut's decimals
             (uint256 tokensReceived, uint24 swapFee) = executeUniswapSwap(wEthAddress, token.tokenAddress, amountToSwap, 0);
@@ -180,6 +184,8 @@ contract TtcLogic is ITtcLogic, ReentrancyGuard {
             amountToMint = 1 * (10 ** i_ttcToken.decimals());
         }
 
+        transferToVault();
+        
         // Mint TTC to the minter
         i_ttcToken.mint(msg.sender, amountToMint);
         emit Minted(msg.sender, msg.value, amountToMint);
@@ -367,6 +373,15 @@ contract TtcLogic is ITtcLogic, ReentrancyGuard {
      * @notice Allows the contract to receive ETH directly.
      */
     receive() external payable {}
+
+    function transferToVault() internal {
+        // Transfer all constituent tokens to the vault
+        for (uint8 i; i < 10; i++) {
+            IERC20 token = IERC20(constituentTokens[i].tokenAddress);
+            uint256 balance = token.balanceOf(address(this));
+            token.transfer(address(i_ttcVault), balance);
+        }
+    }
 
     /**
      * @notice Checks the validity of the initial token list setup for the vault.
