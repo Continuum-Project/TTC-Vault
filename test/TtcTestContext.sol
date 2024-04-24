@@ -3,7 +3,7 @@
 pragma solidity 0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/TtcVault.sol";
+import "../src/TtcLogic.sol";
 import "../src/types/types.sol";
 
 contract TtcTestContext is Test {
@@ -39,7 +39,7 @@ contract TtcTestContext is Test {
     address constant RENDER_ADDRESS = address(0x6De037ef9aD2725EB40118Bb1702EBb27e4Aeb24);
     address constant AAVE_ADDRESS = address(0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9);
 
-    TtcVault public vault;
+    TtcLogic public logic;
     Token[10] public tokens;
 
     function calculateOptimalREthRoute(uint256 _amountIn) public returns (uint[2] memory portions, uint amountOut) {
@@ -59,23 +59,23 @@ contract TtcTestContext is Test {
     }
 
 
-    function getVaultBalances() public view returns (TokenBalance[10] memory) {
+    function getlogicBalances() public view returns (TokenBalance[10] memory) {
         TokenBalance[10] memory balances;
         for (uint8 i; i < 10; i++) {
-            (, address tokenAddress) = vault.constituentTokens(i);
+            (, address tokenAddress) = logic.constituentTokens(i);
             uint256 balance = IERC20(tokenAddress).balanceOf(
-                address(vault)
+                address(logic)
             );
             balances[i] = TokenBalance(tokenAddress, balance);
         }
         return balances;
     }
 
-    function printVaultBalances() public view {
-        console.log("Vault Balances:");
+    function printlogicBalances() public view {
+        console.log("logic Balances:");
         for (uint8 i; i < 10; i++) {
             uint256 balance = IERC20(tokens[i].tokenAddress).balanceOf(
-                address(vault)
+                address(logic)
             );
             console.log(tokens[i].tokenAddress, "-", balance);
         }
