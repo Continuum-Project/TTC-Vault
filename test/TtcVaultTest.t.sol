@@ -3,10 +3,10 @@
 pragma solidity 0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/TtcVault.sol";
+import "../src/TtcLogic.sol";
 import "./TtcTestContext.sol";
 
-contract VaultTest is TtcTestContext {
+contract logicTest is TtcTestContext {
     function setUp() public {
         try vm.createFork(vm.envString("ALCHEMY_MAINNET_RPC_URL")) returns (
             uint256 forkId
@@ -18,7 +18,7 @@ contract VaultTest is TtcTestContext {
         vm.selectFork(mainnetFork);
         address treasury = makeAddr("treasury");
         setUpTokens();
-        vault = new TtcVault(
+        logic = new TtcLogic(
             treasury,
             UNISWAP_SWAP_ROUTER_ADDRESS,
             WETH_ADDRESS,
@@ -38,34 +38,34 @@ contract VaultTest is TtcTestContext {
         address user = makeAddr("user");
         vm.deal(user, weiAmount);
 
-        TokenBalance[10] memory balances = getVaultBalances();
+        TokenBalance[10] memory balances = getlogicBalances();
         for (uint8 i; i < 10; i++) {
             assertEq(
                 balances[i].balance,
                 0,
-                "Initial vault balances should be 0"
+                "Initial logic balances should be 0"
             );
         }
  
 
         vm.startPrank(user);
-        vault.mint{value: weiAmount}();
+        logic.mint{value: weiAmount}();
         vm.stopPrank();
 
        
 
         assertEq(
-            IERC20(vault.getTtcTokenAddress()).balanceOf(user),
+            IERC20(logic.getTtcTokenAddress()).balanceOf(user),
             1 * (10 ** 18),
             "User should have received 1 TTC token"
         );
 
-        balances = getVaultBalances();
+        balances = getlogicBalances();
         for (uint8 i; i < 10; i++) {
             assertGt(
                 balances[i].balance,
                 0,
-                "Post-mint vault balances should be greater than 0"
+                "Post-mint logic balances should be greater than 0"
             );
         }
     }
@@ -75,22 +75,22 @@ contract VaultTest is TtcTestContext {
         testInitialMint();
 
         vm.startPrank(user);
-        uint256 ttcBalance = (vault.i_ttcToken()).balanceOf(user);
-        vault.redeem(ttcBalance);
+        uint256 ttcBalance = (logic.i_ttcToken()).balanceOf(user);
+        logic.redeem(ttcBalance);
         vm.stopPrank();
 
         assertEq(
-            IERC20(vault.getTtcTokenAddress()).totalSupply(),
+            IERC20(logic.getTtcTokenAddress()).totalSupply(),
             0,
             "Total supply should be 0"
         );
 
-        TokenBalance[10] memory balances = getVaultBalances();
+        TokenBalance[10] memory balances = getlogicBalances();
         for (uint8 i; i < 10; i++) {
             assertEq(
                 balances[i].balance,
                 0,
-                "Vault should be empty after redeem"
+                "logic should be empty after redeem"
             );
         }
     }
@@ -100,50 +100,50 @@ contract VaultTest is TtcTestContext {
         address user = makeAddr("user");
         vm.deal(user, weiAmount);
 
-        TokenBalance[10] memory balances = getVaultBalances();
+        TokenBalance[10] memory balances = getlogicBalances();
         for (uint8 i; i < 10; i++) {
             assertEq(
                 balances[i].balance,
                 0,
-                "Initial vault balances should be 0"
+                "Initial logic balances should be 0"
             );
         }
       
         vm.startPrank(user);
-        vault.mint{value: weiAmount}();
+        logic.mint{value: weiAmount}();
 
         assertEq(
-            IERC20(vault.getTtcTokenAddress()).balanceOf(user),
+            IERC20(logic.getTtcTokenAddress()).balanceOf(user),
             1 * (10 ** 18),
             "User should have received 1 TTC token"
         );
 
-        balances = getVaultBalances();
+        balances = getlogicBalances();
         for (uint8 i; i < 10; i++) {
             assertGt(
                 balances[i].balance,
                 0,
-                "Post-mint vault balances should be greater than 0"
+                "Post-mint logic balances should be greater than 0"
             );
         }
        
         weiAmount = 5 ether;
         vm.deal(user, weiAmount);
-        vault.mint{value: weiAmount}();
+        logic.mint{value: weiAmount}();
         vm.stopPrank();
 
         assertGt(
-            IERC20(vault.getTtcTokenAddress()).balanceOf(user),
+            IERC20(logic.getTtcTokenAddress()).balanceOf(user),
             1 * (10 ** 18),
             "User should have received some TTC token from second mint"
         );
 
-        TokenBalance[10] memory newBalances = getVaultBalances();
+        TokenBalance[10] memory newBalances = getlogicBalances();
         for (uint8 i; i < 10; i++) {
             assertGt(
                 newBalances[i].balance,
                 balances[i].balance,
-                "Post-second mint vault balances should be greater than post-first mint balances"
+                "Post-second mint logic balances should be greater than post-first mint balances"
             );
         }
    
@@ -151,53 +151,53 @@ contract VaultTest is TtcTestContext {
 
     function testGetLatestPriceInEthOf() view public {
         // rETH
-        (, address tokenAddress) = vault.constituentTokens(0);
-        uint256 price = vault.getLatestPriceInEthOf(tokenAddress);
+        (, address tokenAddress) = logic.constituentTokens(0);
+        uint256 price = logic.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of rETH should be greater than 0");
 
         // SHIB
-        (, tokenAddress) = vault.constituentTokens(1);
-        price = vault.getLatestPriceInEthOf(tokenAddress);
+        (, tokenAddress) = logic.constituentTokens(1);
+        price = logic.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of SHIB should be greater than 0");
 
         // OKB
-        (, tokenAddress) = vault.constituentTokens(2);
-        price = vault.getLatestPriceInEthOf(tokenAddress);
+        (, tokenAddress) = logic.constituentTokens(2);
+        price = logic.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of OKB should be greater than 0");
 
         // LINK
-        (, tokenAddress) = vault.constituentTokens(3);
-        price = vault.getLatestPriceInEthOf(tokenAddress);
+        (, tokenAddress) = logic.constituentTokens(3);
+        price = logic.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of LINK should be greater than 0");
 
         // wBTC
-        (, tokenAddress) = vault.constituentTokens(4);
-        price = vault.getLatestPriceInEthOf(tokenAddress);
+        (, tokenAddress) = logic.constituentTokens(4);
+        price = logic.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of wBTC should be greater than 0");
 
         // UNI
-        (, tokenAddress) = vault.constituentTokens(5);
-        price = vault.getLatestPriceInEthOf(tokenAddress);
+        (, tokenAddress) = logic.constituentTokens(5);
+        price = logic.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of UNI should be greater than 0");
 
         // MATIC
-        (, tokenAddress) = vault.constituentTokens(6);
-        price = vault.getLatestPriceInEthOf(tokenAddress);
+        (, tokenAddress) = logic.constituentTokens(6);
+        price = logic.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of MATIC should be greater than 0");
 
         // ARB
-        (, tokenAddress) = vault.constituentTokens(7);
-        price = vault.getLatestPriceInEthOf(tokenAddress);
+        (, tokenAddress) = logic.constituentTokens(7);
+        price = logic.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of ARB should be greater than 0");
 
         // MANTLE
-        (, tokenAddress) = vault.constituentTokens(8);
-        price = vault.getLatestPriceInEthOf(tokenAddress);
+        (, tokenAddress) = logic.constituentTokens(8);
+        price = logic.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of MANTLE should be greater than 0");
 
         // MKR
-        (, tokenAddress) = vault.constituentTokens(9);
-        price = vault.getLatestPriceInEthOf(tokenAddress);
+        (, tokenAddress) = logic.constituentTokens(9);
+        price = logic.getLatestPriceInEthOf(tokenAddress);
         assertGt(price, 0, "Price of MKR should be greater than 0");
     }
 
@@ -231,15 +231,15 @@ contract VaultTest is TtcTestContext {
         // basic rebalance between two tokens
         // SUT: rETH, SHIB
         vm.startPrank(treasury);
-        vault.rebalance{value: weiAmount}(testTokens, routes);
+        logic.rebalance{value: weiAmount}(testTokens, routes);
         vm.stopPrank();
 
-        TokenBalance[10] memory balances = getVaultBalances();
+        TokenBalance[10] memory balances = getlogicBalances();
         for (uint8 i; i < 10; i++) {
             assertGt(
                 balances[i].balance,
                 0,
-                "Post-rebalance vault balances should be greater than 0"
+                "Post-rebalance logic balances should be greater than 0"
             );
         }
     }
@@ -286,15 +286,15 @@ contract VaultTest is TtcTestContext {
         vm.deal(treasury, weiAmount);
 
         vm.startPrank(treasury);
-        vault.rebalance{value: weiAmount}(testTokens, routes);
+        logic.rebalance{value: weiAmount}(testTokens, routes);
         vm.stopPrank();
 
-        TokenBalance[10] memory balances = getVaultBalances();
+        TokenBalance[10] memory balances = getlogicBalances();
         for (uint8 i; i < 10; i++) {
             assertGt(
                 balances[i].balance,
                 0,
-                "Post-rebalance vault balances should be greater than 0"
+                "Post-rebalance logic balances should be greater than 0"
             );
         }
     }
@@ -327,29 +327,29 @@ contract VaultTest is TtcTestContext {
         vm.deal(treasury, weiAmount);
 
         vm.startPrank(treasury);
-        vault.rebalance{value: weiAmount}(testTokens, routes);
+        logic.rebalance{value: weiAmount}(testTokens, routes);
         vm.stopPrank();
 
-        TokenBalance[10] memory balances = getVaultBalances();
+        TokenBalance[10] memory balances = getlogicBalances();
         for (uint8 i; i < 10; i++) {
             assertGt(
                 balances[i].balance,
                 0,
-                "Post-rebalance vault balances should be greater than 0"
+                "Post-rebalance logic balances should be greater than 0"
             );
         }
 
-        // assert that RENDER was added to the vault
+        // assert that RENDER was added to the logic
         Token[10] memory newTokens;
         for (uint8 i = 0; i < 10; i++) {
-            (uint8 tokenIndex, address tokenAddress) = vault.constituentTokens(i);
+            (uint8 tokenIndex, address tokenAddress) = logic.constituentTokens(i);
             newTokens[i] = Token(tokenIndex, tokenAddress);
         }
 
         assertEq(
             newTokens[9].tokenAddress,
             RENDER_ADDRESS,
-            "RENDER should be in the vault"
+            "RENDER should be in the logic"
         );
     }
 
@@ -395,34 +395,34 @@ contract VaultTest is TtcTestContext {
         vm.deal(treasury, weiAmount);
 
         vm.startPrank(treasury);
-        vault.rebalance{value: weiAmount}(testTokens, routes);
+        logic.rebalance{value: weiAmount}(testTokens, routes);
         vm.stopPrank();
 
-        TokenBalance[10] memory balances = getVaultBalances();
+        TokenBalance[10] memory balances = getlogicBalances();
         for (uint8 i; i < 10; i++) {
             assertGt(
                 balances[i].balance,
                 0,
-                "Post-rebalance vault balances should be greater than 0"
+                "Post-rebalance logic balances should be greater than 0"
             );
         }
 
-        // assert that the new tokens are in the vault
+        // assert that the new tokens are in the logic
         Token[10] memory newTokens;
         for (uint8 i = 0; i < 10; i++) {
-            (uint8 tokenIndex, address tokenAddress) = vault.constituentTokens(i);
+            (uint8 tokenIndex, address tokenAddress) = logic.constituentTokens(i);
             newTokens[i] = Token(tokenIndex, tokenAddress);
         }
 
         assertEq(
             newTokens[8].tokenAddress,
             AAVE_ADDRESS,
-            "AAVE should be in the vault"
+            "AAVE should be in the logic"
         );
         assertEq(
             newTokens[9].tokenAddress,
             RENDER_ADDRESS,
-            "RENDER should be in the vault"
+            "RENDER should be in the logic"
         );
     }
 
@@ -479,26 +479,26 @@ contract VaultTest is TtcTestContext {
         vm.deal(treasury, weiAmount);
 
         vm.startPrank(treasury);
-        vault.rebalance{value: weiAmount}(testTokens, routes);
+        logic.rebalance{value: weiAmount}(testTokens, routes);
         vm.stopPrank();
 
-        TokenBalance[10] memory balances = getVaultBalances();
+        TokenBalance[10] memory balances = getlogicBalances();
         for (uint8 i; i < 10; i++) {
             assertGt(
                 balances[i].balance,
                 0,
-                "Post-rebalance vault balances should be greater than 0"
+                "Post-rebalance logic balances should be greater than 0"
             );
         }
     }
 
-    // Returns the amount of tokens that is x% of the balance of the vault
+    // Returns the amount of tokens that is x% of the balance of the logic
     function xPercentFromBalance(uint8 percent, address tokenAddress)
         private
         view
         returns (uint256)
     {
-        return (percent * IERC20(tokenAddress).balanceOf(address(vault))) / 100;
+        return (percent * IERC20(tokenAddress).balanceOf(address(logic))) / 100;
     }
 
     // Returns the amount of eth that is equivalent to the amount of tokens
@@ -508,7 +508,7 @@ contract VaultTest is TtcTestContext {
         returns (uint256)
     {   
         uint256 tokenDecimals = ERC20(tokenAddress).decimals();
-        return (amount * vault.getLatestPriceInEthOf(tokenAddress)) / (10**tokenDecimals);
+        return (amount * logic.getLatestPriceInEthOf(tokenAddress)) / (10**tokenDecimals);
     }
 
     // Returns the amount with 3% slippage applied
