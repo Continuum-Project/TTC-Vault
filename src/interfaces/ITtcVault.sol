@@ -39,5 +39,5 @@ interface ITtcVault {
     function redeem(uint256 _ttcAmount) external;
     
     /// @notice Rebalance the vault
-    function rebalance(Token[10] calldata _newTokens, Route[10][] calldata routes) external payable;
+    function rebalance(Token[10] calldata _newTokens, Route[] calldata routes) external payable;
 }
