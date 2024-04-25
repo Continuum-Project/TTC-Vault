@@ -281,12 +281,16 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                     // use rocket swap for rETH
                     if (rEthRoute.tokenIn == address(i_rEthToken) && rEthRoute.tokenOut == address(i_wEthToken)) {
                         // get ETH for rETH
-                        uint256 rEthAmountForEth = rEthRoute.amountIn;
-                        executeRocketSwapFrom(rEthAmountForEth, rEthRoute.amountOutMinimum);
+                        uint256 rEthBalance = i_rEthToken.balanceOf(address(this));
+                        uint256 rEthAmountForEth = rEthRoute.weightIn * rEthBalance / 100;
+                        uint256 rEthAmountOutMin = (rEthRoute.minPercentOut * rEthAmountForEth) / 100;
+                        executeRocketSwapFrom(rEthAmountForEth, rEthAmountOutMin);
                     } else if (rEthRoute.tokenOut == address(i_rEthToken) && rEthRoute.tokenIn == address(i_wEthToken)) {
                         // get rETH for ETH
-                        uint256 ethAmountForREth = rEthRoute.amountIn;
-                        executeRocketSwapTo(ethAmountForREth, rEthRoute.amountOutMinimum);
+                        uint256 ethBalance = address(this).balance;
+                        uint256 ethAmountForREth = rEthRoute.weightIn * ethBalance / 100;
+                        uint256 rEthAmountOutMin = (rEthRoute.minPercentOut * ethAmountForREth) / 100;
+                        executeRocketSwapTo(ethAmountForREth, rEthAmountOutMin);
                     } else {
                         revert InvalidRoute();
                     }
@@ -294,10 +298,13 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
                 // get routes for the swap
                 Route calldata route = routes[i][j];
-                IERC20(route.tokenIn).approve(address(i_swapRouter), route.amountIn);
+
+                uint256 amountIn = route.weightIn * IERC20(route.tokenIn).balanceOf(address(this)) / 100;
+                uint256 amountOutMinimum = (route.minPercentOut * amountIn) / 100;
+                IERC20(route.tokenIn).approve(address(i_swapRouter), amountIn);
                 
                 // Execute swap.
-                executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
+                executeUniswapSwap(route.tokenIn, route.tokenOut, amountIn, amountOutMinimum);
             }
         }
 
