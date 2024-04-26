@@ -3,7 +3,7 @@
 pragma solidity 0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
-import "../src/TTC.sol";
+import "../../src/core/TTC.sol";
 
 contract TtcTest is Test{
     address public ttcOwner;

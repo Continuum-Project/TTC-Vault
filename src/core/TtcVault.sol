@@ -6,19 +6,19 @@ pragma solidity 0.8.20;
 import "./TTC.sol";
 
 // Types
-import {Route, Token} from "./types/types.sol";
+import {Route, Token} from "../types/types.sol";
 import {IUniswapV3PoolState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
 import {console} from "forge-std/Test.sol";
 
 // Interfaces
-import "./interfaces/ITtcVault.sol";
+import "../interfaces/ITtcVault.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@rocketpool-router/contracts/RocketSwapRouter.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title TtcVault
- * @author Shivaansh Kapoor
+ * @author Continuum Labs
  * @notice Vault for Continuum's first product: TTC (Top Ten Continuum) Token
  * @notice TTC tokens are fungible assets backed by a basket of the top 10 ERC20 tokens by market cap (the allocation of each token depends on its market cap relative to others)
  * @notice The TtcVault allows for minting TTC tokens with ETH and redeeming TTC tokens for its constituent tokens

@@ -3,8 +3,8 @@
 pragma solidity 0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/TtcVault.sol";
-import "../src/types/types.sol";
+import "../../src/core/TtcVault.sol";
+import "../../src/types/types.sol";
 
 contract TtcTestContext is Test {
     struct TokenBalance {
