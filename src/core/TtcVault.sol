@@ -221,7 +221,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      */
     function rebalance(
         Token[10] calldata _newTokens, 
-        Route[10][] calldata routes
+        Route[] calldata routes
     ) public payable onlyTreasury nonReentrant {
         if (!checkTokenList(_newTokens)) {
             revert InvalidTokenList();
@@ -232,26 +232,22 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         int256[10] memory deviations;
         
         // perform swaps for other tokens
-        for (uint8 i; i < 10; i++) {
+        for (uint8 i; i < routes.length; i++) {
             // if the weight is the same, or no routes provided - no need to swap
-            if (_newTokens[i].weight == constituentTokens[i].weight || routes[i][0].tokenIn == address(0)) {
+            if (routes[i].tokenIn == address(0)) {
                 continue;
             }
 
             // perform swap
-            for (uint8 j; j < routes[i].length; j++) {
-                if (routes[i][j].tokenIn == address(0)) {
-                    break;
-                }
-                
+            // get route for the swap
+            Route calldata route = routes[i];
 
-                // get routes for the swap
-                Route calldata route = routes[i][j];
-                IERC20(route.tokenIn).approve(address(i_swapRouter), route.amountIn);
-                
-                // Execute swap.
-                executeUniswapSwap(route.tokenIn, route.tokenOut, route.amountIn, route.amountOutMinimum);
-            }
+            uint256 amountIn = (IERC20(route.tokenIn).balanceOf(address(this)) * route.weightIn) / 100;
+            uint256 amountOutMinimum = (IERC20(route.tokenOut).balanceOf(address(this)) * route.weightOutMin) / 100;
+            IERC20(route.tokenIn).approve(address(i_swapRouter), amountIn);
+            
+            // Execute swap.
+            executeUniswapSwap(route.tokenIn, route.tokenOut, amountIn, amountOutMinimum);
         }
 
         // get ethereum amount of each token in the vault (aumPerToken) and total ethereum amount in the vault (totalAUM)
