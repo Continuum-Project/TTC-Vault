@@ -6,7 +6,6 @@ struct Route {
     address tokenIn;
     address tokenOut;
     uint8 weightIn;
-    uint8 weightOutMin;
 }
 
 // Structure to represent a token and its allocation in the vault
