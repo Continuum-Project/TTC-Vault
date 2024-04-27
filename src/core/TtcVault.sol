@@ -244,26 +244,6 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                     break;
                 }
                 
-                // // custom logic for rETH swaps
-                // // TODO: abstract this into a separate function
-                // if (routes[i][j].tokenIn == address(i_rEthToken) || routes[i][j].tokenOut == address(i_rEthToken)) {
-                //     // for rETH, use balancer and uniswap with predetermined weights to swap
-                //     // assumption: route[0] is a single route for rETH (since there is no need to use some proxy token between rETH/ETH)
-                //     Route calldata rEthRoute = routes[i][j];
-
-                //     // use rocket swap for rETH
-                //     if (rEthRoute.tokenIn == address(i_rEthToken) && rEthRoute.tokenOut == address(i_wEthToken)) {
-                //         // get ETH for rETH
-                //         uint256 rEthAmountForEth = rEthRoute.amountIn;
-                //         executeRocketSwapFrom(rEthAmountForEth, rEthRoute.amountOutMinimum);
-                //     } else if (rEthRoute.tokenOut == address(i_rEthToken) && rEthRoute.tokenIn == address(i_wEthToken)) {
-                //         // get rETH for ETH
-                //         uint256 ethAmountForREth = rEthRoute.amountIn;
-                //         executeRocketSwapTo(ethAmountForREth, rEthRoute.amountOutMinimum);
-                //     } else {
-                //         revert InvalidRoute();
-                //     }
-                // }
 
                 // get routes for the swap
                 Route calldata route = routes[i][j];
