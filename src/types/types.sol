@@ -5,8 +5,8 @@ pragma solidity 0.8.20;
 struct Route {
     address tokenIn;
     address tokenOut;
-    uint256 amountIn;
-    uint256 amountOutMinimum;
+    uint8 weightIn;
+    uint8 weightOutMin;
     // uint24 fee; // TODO: consider using parameterized fee
 }
 
