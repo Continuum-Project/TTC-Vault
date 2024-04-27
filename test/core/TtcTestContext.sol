@@ -51,7 +51,7 @@ contract TtcTestContext is Test {
         }
 
         for (uint8 i = 1; i < 10; i++) {
-            (, address tokenAddress) = vault.constituentTokens(i);
+            (, address tokenAddress, ) = vault.constituentTokens(i);
             uint256 balance = IERC20(tokenAddress).balanceOf(address(addr));
             balances[i] = TokenBalance(tokenAddress, balance);
         }
@@ -74,9 +74,9 @@ contract TtcTestContext is Test {
 
     function setUpTokens() internal {
         // Native ETH
-        tokens[0] = (Token(50, STETH_ADDRESS));
+        tokens[0] = (Token(50, STETH_ADDRESS, 0));
         // SHIB Token
-        tokens[1] = (Token(5, SHIB_ADDRESS));
+        tokens[1] = (Token(5, SHIB_ADDRESS, vault.UNISWAP_30_BPS()));
         // // TONCOIN Token
         // tokens[2] = (
         //     Token(
@@ -85,21 +85,21 @@ contract TtcTestContext is Test {
         //     )
         // );
         // OKB Token
-        tokens[2] = (Token(5, OKB_ADDRESS));
+        tokens[2] = (Token(5, OKB_ADDRESS, vault.UNISWAP_30_BPS()));
         // LINK Token
-        tokens[3] = (Token(5, LINK_ADDRESS));
+        tokens[3] = (Token(5, LINK_ADDRESS, vault.UNISWAP_30_BPS()));
         // wBTC Token
-        tokens[4] = (Token(5, WBTC_ADDRESS));
+        tokens[4] = (Token(5, WBTC_ADDRESS, vault.UNISWAP_30_BPS()));
         // UNI Token
-        tokens[5] = (Token(5, UNI_ADDRESS));
+        tokens[5] = (Token(5, UNI_ADDRESS, vault.UNISWAP_30_BPS()));
         // MATIC Token
-        tokens[6] = (Token(5, MATIC_ADDRESS));
+        tokens[6] = (Token(5, MATIC_ADDRESS, vault.UNISWAP_30_BPS()));
         // ARB Token
-        tokens[7] = (Token(5, ARB_ADDRESS));
+        tokens[7] = (Token(5, ARB_ADDRESS, vault.UNISWAP_5_BPS()));
         // MANTLE Token
-        tokens[8] = (Token(5, MANTLE_ADDRESS));
+        tokens[8] = (Token(5, MANTLE_ADDRESS, vault.UNISWAP_30_BPS()));
         // MKR Token
-        tokens[9] = (Token(10, MKR_ADDRESS));
+        tokens[9] = (Token(10, MKR_ADDRESS, vault.UNISWAP_30_BPS()));
         // BNB Token
         // tokens[9] = (
         //     Token(
@@ -111,25 +111,25 @@ contract TtcTestContext is Test {
 
     function setUpNewTokens() internal {
         // rETH Token
-        tokens[0] = (Token(50, STETH_ADDRESS));
+        tokens[0] = (Token(50, STETH_ADDRESS, 0));
         // SHIB Token
-        tokens[1] = (Token(5, SHIB_ADDRESS));
+        tokens[1] = (Token(5, SHIB_ADDRESS, vault.UNISWAP_30_BPS()));
         // TONCOIN Token
-        tokens[2] = (Token(8, TONCOIN_ADDRESS));
+        tokens[2] = (Token(8, TONCOIN_ADDRESS, vault.UNISWAP_100_BPS()));
         // LINK Token
-        tokens[3] = (Token(7, LINK_ADDRESS));
+        tokens[3] = (Token(7, LINK_ADDRESS, vault.UNISWAP_30_BPS()));
         // wBTC Token
-        tokens[4] = (Token(7, WBTC_ADDRESS));
+        tokens[4] = (Token(7, WBTC_ADDRESS, vault.UNISWAP_30_BPS()));
         // UNI Token
-        tokens[5] = (Token(3, UNI_ADDRESS));
+        tokens[5] = (Token(3, UNI_ADDRESS, vault.UNISWAP_30_BPS()));
         // MATIC Token
-        tokens[6] = (Token(4, MATIC_ADDRESS));
+        tokens[6] = (Token(4, MATIC_ADDRESS, vault.UNISWAP_30_BPS()));
         // ARB Token
-        tokens[7] = (Token(6, ARB_ADDRESS));
+        tokens[7] = (Token(6, ARB_ADDRESS, vault.UNISWAP_5_BPS()));
         // MANTLE Token
-        tokens[8] = (Token(6, MANTLE_ADDRESS));
+        tokens[8] = (Token(6, MANTLE_ADDRESS, vault.UNISWAP_30_BPS()));
         // MKR Token
-        tokens[9] = (Token(4, MKR_ADDRESS));
+        tokens[9] = (Token(4, MKR_ADDRESS, vault.UNISWAP_30_BPS()));
         // BNB Token
         // tokens[9] = (
         //     Token(

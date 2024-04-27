@@ -40,10 +40,10 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
     // Fee is initally set to 0.1% of redemption amount.
     uint8 public constant TREASURY_REDEMPTION_FEE = 1e1;
     // Uniswap pool fees are denominated in 100ths of a basis point.
-    uint24 public constant UNISWAP_PRIMARY_POOL_FEE = 3e3;
-    uint24 public constant UNISWAP_SECONDARY_POOL_FEE = 1e4;
-    uint24 public constant UNISWAP_TERTIARY_POOL_FEE = 5e2;
-    uint24 public constant UNISWAP_QUATERNARY_POOL_FEE = 1e2; // added via proposal in 2021
+    uint24 public constant UNISWAP_30_BPS = 3e3; // 0.3%
+    uint24 public constant UNISWAP_100_BPS = 1e4; // 1%
+    uint24 public constant UNISWAP_5_BPS = 5e2; // 0.05%
+    uint24 public constant UNISWAP_1_BPS = 1e2; // added via proposal in 2021, 0.01%
 
     // Immutable globals
     TTC public immutable i_ttcToken;
@@ -291,7 +291,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
                 // absolute value of deviation
                 uint256 uDeviation = abs(deviation);
 
-                uint256 tokenValueInEth = getLatestPriceInEthOf(tokenAddress);
+                uint256 tokenValueInEth = getLatestPriceInEthOf(tokenAddress, constituentTokens[i].feeTierEth);
                 uint256 deviationToSellInToken = uDeviation * 10 ** ERC20(tokenAddress).decimals() / tokenValueInEth;
 
                 IERC20(tokenAddress).approve(address(i_swapRouter), deviationToSellInToken);
@@ -368,7 +368,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
             tokenIn: _tokenIn, // Token to swap
             tokenOut: _tokenOut, // Token to receive
-            fee: UNISWAP_PRIMARY_POOL_FEE, // Initially set primary fee pool
+            fee: UNISWAP_30_BPS, // Initially set primary fee pool
             recipient: address(this), // Send tokens to TTC vault
             deadline: block.timestamp, // Swap must be performed in the current block. This should be passed in as a parameter to mitigate MEV exploits.
             amountIn: _amountIn, // Amount of tokenIn to swap
@@ -383,11 +383,11 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         try i_swapRouter.exactInputSingle(params) returns (uint256 amountOutResult) {
             return (amountOutResult, params.fee);
         } catch {
-            params.fee = UNISWAP_SECONDARY_POOL_FEE;
+            params.fee = UNISWAP_100_BPS;
             try i_swapRouter.exactInputSingle(params) returns (uint256 amountOutResult) {
                 return (amountOutResult, params.fee);
             } catch {
-                params.fee = UNISWAP_TERTIARY_POOL_FEE;
+                params.fee = UNISWAP_5_BPS;
                 return (i_swapRouter.exactInputSingle(params), params.fee);
             }
         }
@@ -398,9 +398,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
      * @param tokenAddress The address of the token to get the price of
      * @return The number of ETH that has to be paid for 1 constituent token
      */
-    function getLatestPriceInEthOf(address tokenAddress) public view returns (uint256) {
-        address wEthAddress = address(i_wEthToken);
-
+    function getLatestPriceInEthOf(address tokenAddress, uint24 tokenFeeTier) public view returns (uint256) {
         // if token is rETH (0 index), use native contract for better price accuracy
         if (tokenAddress == address(0)) {
             return 1e18;
@@ -408,7 +406,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
         // get a token/wETH pool's address
         
-        address pool = getPoolWithFee(tokenAddress, wEthAddress, UNISWAP_PRIMARY_POOL_FEE);
+        address pool = getEthPoolWithFee(tokenAddress, tokenFeeTier);
         if (pool == address(0)) {
             revert PoolDoesNotExist();
         }
@@ -416,18 +414,6 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         // convert to IUniswapV3PoolState to get access to sqrtPriceX96
         IUniswapV3PoolState _pool = IUniswapV3PoolState(pool);
         
-        uint24[3] memory feeTiers = [UNISWAP_SECONDARY_POOL_FEE, UNISWAP_TERTIARY_POOL_FEE, UNISWAP_QUATERNARY_POOL_FEE];
-
-        for (uint8 i; i < 3; i++) {
-            pool = getPoolWithFee(tokenAddress, wEthAddress, feeTiers[i]);
-            if (pool == address(0)) {
-                continue;
-            } else {
-                _pool = IUniswapV3PoolState(pool);
-                break;
-            }
-        }
-
         (uint160 sqrtPriceX96, , , , , ,) = _pool.slot0(); // get sqrtPrice of a pool multiplied by 2^96
         uint256 decimals = 10 ** ERC20(tokenAddress).decimals();
         uint256 sqrtPrice = (sqrtPriceX96 * decimals) / 2 ** 96; // get sqrtPrice with decimals of token
@@ -445,7 +431,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         uint256 totalAum;
         for (uint8 i; i < 10; i++) {
             address tokenAddress = constituentTokens[i].tokenAddress;
-            uint256 tokenPrice = getLatestPriceInEthOf(tokenAddress);
+            uint256 tokenPrice = getLatestPriceInEthOf(tokenAddress, constituentTokens[i].feeTierEth);
             uint256 tokenBalance = IERC20(tokenAddress).balanceOf(address(this));
 
             aumPerToken[i] = (tokenBalance * tokenPrice) / (10 ** ERC20(tokenAddress).decimals());
@@ -479,5 +465,15 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
         }
 
         return abi.decode(data, (address));
+    }
+
+    /**
+     * @notice Get the address of a pool with a given fee for ETH
+     * @param tokenIn The address of the token to swap from
+     * @param fee The fee of the pool
+     * @return The address of the pool
+     */
+    function getEthPoolWithFee(address tokenIn, uint24 fee) public view returns (address) {
+        return getPoolWithFee(address(i_wEthToken), tokenIn, fee);
     }
 }
