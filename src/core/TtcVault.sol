@@ -227,7 +227,9 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             revert InvalidTokenList();
         }
 
-        constituentTokens = _newTokens;
+        for (uint8 i; i < 10; i++) {
+            constituentTokens[i] = _newTokens[i];
+        }
 
         for (uint8 i; i < _routes.length; i++) {
             uint24 firstSwapFeeTier = getFeeTier(_routes[i].tokenIn);
