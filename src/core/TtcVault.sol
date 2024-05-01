@@ -227,9 +227,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
             revert InvalidTokenList();
         }
 
-        for (uint8 i; i < 10; i++) {
-            constituentTokens[i] = _newTokens[i];
-        }
+        constituentTokens = _newTokens;
 
         for (uint8 i; i < _routes.length; i++) {
             uint24 firstSwapFeeTier = getFeeTier(_routes[i].tokenIn);
@@ -242,7 +240,7 @@ contract TtcVault is ITtcVault, ReentrancyGuard {
 
         (uint256[10] memory aumPerToken, uint256 aum) = aumBreakdown();
         for (uint8 i; i < 10; i++) {
-            uint256 aumPercentage = aumPerToken[i] / aum;
+            uint256 aumPercentage = (aumPerToken[i] * 100) / aum;
             // Check if aum percentage deviated by more than 1%
             if ((aumPercentage < (_newTokens[i].weight - 1)) || (aumPercentage > (_newTokens[i].weight + 1))) {
                 revert RebalancingFailed();
