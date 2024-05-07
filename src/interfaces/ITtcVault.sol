@@ -20,6 +20,8 @@ interface ITtcVault {
     error NegativePrice();
     error NegativeTick();
     error InvalidRoute();
+    error TokenNotConstituent();
+    error RebalancingFailed();
 
     // Events
     /// @notice event for minting
@@ -39,5 +41,5 @@ interface ITtcVault {
     function redeem(uint256 _ttcAmount) external;
     
     /// @notice Rebalance the vault
-    function rebalance(Token[10] calldata _newTokens, Route[] calldata routes) external payable;
+    function rebalance(Token[10] memory _newTokens, Route[] calldata _routes) external payable;
 }
